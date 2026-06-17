@@ -27,27 +27,28 @@ abstract class Utilisateur {
 class StaffMedical {
   - matricule : String
   - service : String
-  + remplirFormulaire(p : Patient) : EvaluationTriage
-  + lancerPrediction(e : EvaluationTriage) : PredictionResult
+  + remplirFormulaire() : EvaluationTriage
+  + lancerPrediction() : PredictionResult
   + consulterFileAttente() : List<EvaluationTriage>
-  + consulterHistorique() : List<EvaluationTriage>
+  + consulterHistoriquePatients() : List<EvaluationTriage>
 }
 
 class Medecin {
   - specialite : String
-  + consulterResultat(e : EvaluationTriage) : PredictionResult
-  + validerDecision(e : EvaluationTriage) : void
-  + rectifierDecision(e : EvaluationTriage, c : KtasClass) : void
-  + ajouterCommentaire(e : EvaluationTriage, txt : String) : void
-  + prendreDecisionFinale(e : EvaluationTriage) : void
+  + consulterResultat() : PredictionResult
+  + consulterDonneesPatient() : Patient
+  + validerDecision() : void
+  + rectifierDecision() : void
+  + ajouterCommentaire() : void
+  + prendreDecisionFinale() : void
 }
 
 class Administrateur {
-  + gererStaff(u : StaffMedical) : void
-  + gererMedecins(m : Medecin) : void
-  + gererPatients(p : Patient) : void
-  + consulterStatistiques() : Statistiques
-  + consulterHistoriqueSysteme() : List<Log>
+  + gererStaff() : void
+  + gererMedecins() : void
+  + gererPatients() : void
+  + consulterStatistiques() : Statistique
+  + consulterHistoriquesSysteme() : void
 }
 
 Utilisateur <|-- StaffMedical
@@ -60,7 +61,7 @@ class Patient {
   - nom : String
   - prenom : String
   - age : int
-  - sexe : char
+  - sexe : String
   - numeroDossier : String
   + getDossier() : String
 }
@@ -86,9 +87,7 @@ class PredictionResult {
   - idResultat : Long
   - classeKTAS : KtasClass
   - scoreConfiance : float
-  - probabilites : Map<KtasClass, Float>
   - isCritical : boolean
-  - modelVersion : String
   - dateGeneration : DateTime
 }
 
@@ -98,45 +97,49 @@ enum KtasClass {
   NON_URGENT
 }
 
-Patient "1" --o "*" EvaluationTriage : concerne
-StaffMedical "1" --> "*" EvaluationTriage : réalise
-Medecin "1" --> "*" EvaluationTriage : valide
-EvaluationTriage "1" *-- "1" PredictionResult : produit
-EvaluationTriage --> KtasClass
-PredictionResult --> KtasClass
-
-' ====================== COUCHE BACKEND J2EE ======================
-interface ApiRest {
-  + recevoirDonnees(req : TriageRequest) : Response
-  + preparerDonnees(req : TriageRequest) : float[]
-  + appelerModele(features : float[]) : PredictionResult
-  + retournerResultat(res : PredictionResult) : Response
-}
-
+' ====================== COUCHE APPLICATIVE ======================
 class TriageController {
-  + predict(req : TriageRequest) : Response
-  + getFileAttente() : Response
-  + confirmDecision(req : DecisionRequest) : Response
+  + predict() : PredictionResult
+  + getFileAttente() : List<EvaluationTriage>
+  + confirmerDecision() : void
 }
 
 class TriageService {
-  + buildFeatures(e : EvaluationTriage) : float[]
-  + normalize(f : float[]) : float[]
-  + applyThreshold(proba : float[]) : PredictionResult
-  + predire(e : EvaluationTriage) : PredictionResult
+  + buildFeatures() : float[]
+  + normaliser() : float[]
+  + appliquerSeuil() : PredictionResult
+  + predire() : PredictionResult
+  + enregistrerDecisionFinale() : void
 }
 
-class ModeleML {
-  - session : OrtSession
-  - seuilCritique : float
-  + recevoirFeatures(f : float[]) : void
+class ServiceML {
+  + recevoirFeatures() : void
   + predire() : float[]
   + retournerScore() : PredictionResult
 }
 
-TriageController ..|> ApiRest
-TriageController "1" --> "1" TriageService : délègue
-TriageService "1" --> "1" ModeleML : appelle
+class Statistique {
+  - totalPatients : int
+  - casCritiques : int
+  - patientsEnAttente : int
+  - repartitionKTAS : Map
+  + calculerStatistiques() : void
+}
+
+' ====================== RELATIONS ======================
+Patient "1" --o "*" EvaluationTriage : concerne
+StaffMedical "1" --> "*" EvaluationTriage : réalise
+Medecin "1" --> "*" EvaluationTriage : valide / rectifie
+EvaluationTriage "1" *-- "1" PredictionResult : produit
+EvaluationTriage --> KtasClass
+PredictionResult --> KtasClass
+
+TriageController "1" --> "1" TriageService : utilise
+TriageService "1" --> "1" ServiceML : utilise
 TriageService ..> EvaluationTriage : exploite
 TriageService ..> PredictionResult : crée
+
+Administrateur "1" --> "*" Utilisateur : gère
+Administrateur "1" --> "*" Patient : gère
+Administrateur "1" --> "1" Statistique : consulte
 @enduml

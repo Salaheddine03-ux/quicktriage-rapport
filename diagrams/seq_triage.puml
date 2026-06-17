@@ -8,39 +8,49 @@ skinparam ParticipantBackgroundColor #EAF2F8
 skinparam ParticipantBorderColor #1F618D
 skinparam ActorBackgroundColor #D6EAF8
 skinparam ActorBorderColor #1F618D
+skinparam DatabaseBackgroundColor #D5F5E3
+skinparam DatabaseBorderColor #1E8449
 skinparam SequenceLifeLineBorderColor #5D6D7E
 skinparam ArrowColor #2C3E50
 
-actor "Staff médical\n(Infirmier)" as Staff
-participant "Application\nAndroid" as App
-participant "TriageController\n(API REST JAX-RS)" as Ctrl
-participant "TriageService\n(EJB)" as Svc
-participant "Modèle ML\n(ONNX)" as ML
+actor "Staff médical" as Staff
+participant "Interface\nQuickTriage" as UI
+participant "TriageController" as Ctrl
+participant "TriageService" as Svc
+participant "Service\nMachine Learning" as ML
+database "Base de\ndonnées" as DB
 
-Staff -> App : saisir les données du patient
-activate App
-App -> App : valider les champs (bornes physiologiques)
+Staff -> UI : s'authentifier
+activate UI
+UI --> Staff : accès autorisé
 
-App -> Ctrl : POST /api/triage/predict (JSON)
+Staff -> UI : saisir les données du patient
+UI -> UI : valider les champs (bornes physiologiques)
+
+UI -> Ctrl : envoyer les données de triage
 activate Ctrl
 Ctrl -> Svc : predire(evaluation)
 activate Svc
 
-Svc -> Svc : buildFeatures() + normalize()
+Svc -> Svc : buildFeatures() + normaliser()
 Svc -> ML : predire(features)
 activate ML
-ML -> ML : inférence XGBoost / ONNX
-ML --> Svc : probabilités par classe
+ML -> ML : exécuter le modèle XGBoost / ONNX
+ML --> Svc : classe KTAS + score de confiance
 deactivate ML
 
-Svc -> Svc : applyThreshold() (seuil CRITIQUE = 0.30)
+Svc -> Svc : appliquerSeuil()
+Svc -> DB : enregistrer le résultat initial
+activate DB
+DB --> Svc : confirmation
+deactivate DB
 Svc --> Ctrl : PredictionResult
 deactivate Svc
 
-Ctrl --> App : 200 OK (classe, confiance, probabilités)
+Ctrl --> UI : résultat initial (classe, confiance)
 deactivate Ctrl
 
-App -> App : afficher le résultat (code couleur de priorité)
-App --> Staff : résultat KTAS initial
-deactivate App
+UI -> UI : afficher le résultat (code couleur de priorité)
+UI --> Staff : résultat KTAS initial
+deactivate UI
 @enduml

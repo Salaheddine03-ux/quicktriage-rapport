@@ -20,25 +20,29 @@ skinparam actor {
   BorderColor #1F618D
 }
 
-actor "Staff médical\n(Infirmier)" as Staff
+actor "Staff médical" as Staff
 actor "Médecin" as Doc
 actor "Administrateur" as Admin
-actor "API REST J2EE" as Api
-actor "Modèle ML\n(XGBoost / ONNX)" as ML
 
 rectangle "Système QuickTriage" {
   usecase "S'authentifier" as UC_Login
+
+  ' --- Staff médical ---
   usecase "Saisir les données\ndu patient" as UC_Data
   usecase "Remplir le formulaire\nde triage" as UC_Form
   usecase "Lancer la prédiction\nKTAS" as UC_Predict
   usecase "Consulter le\nrésultat initial" as UC_Result
   usecase "Consulter la\nfile d'attente" as UC_Queue
   usecase "Consulter l'historique\ndes patients" as UC_Hist
+
+  ' --- Médecin ---
   usecase "Consulter les données\ndétaillées du patient" as UC_Detail
+  usecase "Prendre la\ndécision finale" as UC_Final
   usecase "Valider la décision" as UC_Validate
   usecase "Rectifier la décision" as UC_Rectify
   usecase "Ajouter un\ncommentaire médical" as UC_Comment
-  usecase "Prendre la\ndécision finale" as UC_Final
+
+  ' --- Administrateur ---
   usecase "Gérer les comptes\ndu staff médical" as UC_MgStaff
   usecase "Gérer les médecins" as UC_MgDoc
   usecase "Gérer les patients" as UC_MgPat
@@ -46,38 +50,51 @@ rectangle "Système QuickTriage" {
   usecase "Consulter les\nhistoriques système" as UC_SysHist
 }
 
-' --- Staff médical ---
-Staff --> UC_Login
+' ===================== Associations acteurs =====================
+Staff --> UC_Data
 Staff --> UC_Form
 Staff --> UC_Predict
 Staff --> UC_Result
 Staff --> UC_Queue
 Staff --> UC_Hist
 
-' --- Médecin ---
-Doc --> UC_Login
 Doc --> UC_Queue
 Doc --> UC_Detail
 Doc --> UC_Result
 Doc --> UC_Final
+Doc --> UC_Validate
+Doc --> UC_Rectify
+Doc --> UC_Comment
 
-' --- Administrateur ---
-Admin --> UC_Login
 Admin --> UC_MgStaff
 Admin --> UC_MgDoc
 Admin --> UC_MgPat
 Admin --> UC_Stats
 Admin --> UC_SysHist
 
-' --- Acteurs techniques ---
-UC_Predict --> Api
-Api --> ML
+' ============ <<include>> vers l'authentification ============
+UC_Data    ..> UC_Login : <<include>>
+UC_Form    ..> UC_Login : <<include>>
+UC_Predict ..> UC_Login : <<include>>
+UC_Result  ..> UC_Login : <<include>>
+UC_Queue   ..> UC_Login : <<include>>
+UC_Hist    ..> UC_Login : <<include>>
+UC_Detail  ..> UC_Login : <<include>>
+UC_Final   ..> UC_Login : <<include>>
+UC_MgStaff ..> UC_Login : <<include>>
+UC_MgDoc   ..> UC_Login : <<include>>
+UC_MgPat   ..> UC_Login : <<include>>
+UC_Stats   ..> UC_Login : <<include>>
+UC_SysHist ..> UC_Login : <<include>>
 
-' --- Relations entre cas d'utilisation ---
-UC_Form ..> UC_Data : <<include>>
-UC_Predict ..> UC_Form : <<include>>
-UC_Final ..> UC_Result : <<include>>
-UC_Validate .> UC_Final : <<extend>>
-UC_Rectify .> UC_Final : <<extend>>
-UC_Comment .> UC_Final : <<extend>>
+' ============ <<include>> métier (enchaînement) ============
+UC_Form    ..> UC_Data    : <<include>>
+UC_Predict ..> UC_Form    : <<include>>
+UC_Result  ..> UC_Predict : <<include>>
+UC_Final   ..> UC_Result  : <<include>>
+
+' ============ <<extend>> sur la décision finale ============
+UC_Validate ..> UC_Final : <<extend>>
+UC_Rectify  ..> UC_Final : <<extend>>
+UC_Comment  ..> UC_Final : <<extend>>
 @enduml
