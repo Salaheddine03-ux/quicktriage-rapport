@@ -1,5 +1,5 @@
 @startuml seq_rest
-title Scénario 3 : Gestion des utilisateurs
+title Scénario 3 : Gestion administrative
 skinparam dpi 150
 skinparam shadowing false
 skinparam defaultFontName Helvetica
@@ -8,69 +8,86 @@ skinparam ParticipantBackgroundColor #EAF2F8
 skinparam ParticipantBorderColor #1F618D
 skinparam ActorBackgroundColor #D6EAF8
 skinparam ActorBorderColor #1F618D
+skinparam DatabaseBackgroundColor #D5F5E3
+skinparam DatabaseBorderColor #1E8449
 skinparam SequenceLifeLineBorderColor #5D6D7E
 skinparam ArrowColor #2C3E50
 
 actor "Administrateur" as Admin
-participant "Application\nAndroid" as App
-participant "UserController\n(API REST)" as Ctrl
-participant "UserService\n(EJB)" as Svc
+participant "Interface\nQuickTriage" as UI
+participant "UserController" as Ctrl
+participant "UserService" as Svc
 database "Base de\ndonnées" as DB
 
-Admin -> App : accéder à la gestion des utilisateurs
-activate App
+Admin -> UI : s'authentifier
+activate UI
+UI --> Admin : accès autorisé
+
+Admin -> UI : accéder au module d'administration
 
 alt Ajouter un utilisateur
-  Admin -> App : saisir les informations du nouvel utilisateur
-  App -> Ctrl : POST /api/users
+  Admin -> UI : saisir les informations du nouvel utilisateur
+  UI -> Ctrl : ajouterUtilisateur(u)
   activate Ctrl
   Ctrl -> Svc : creerUtilisateur(u)
   activate Svc
+  Svc -> Svc : valider les informations
   Svc -> DB : INSERT utilisateur
+  activate DB
   DB --> Svc : id généré
+  deactivate DB
   Svc --> Ctrl : utilisateur créé
   deactivate Svc
-  Ctrl --> App : 201 Created
+  Ctrl --> UI : confirmation
   deactivate Ctrl
 
 else Modifier un utilisateur
-  Admin -> App : modifier les informations
-  App -> Ctrl : PUT /api/users/{id}
+  Admin -> UI : modifier les informations
+  UI -> Ctrl : modifierUtilisateur(u)
   activate Ctrl
-  Ctrl -> Svc : modifierUtilisateur(u)
+  Ctrl -> Svc : mettreAJourUtilisateur(u)
   activate Svc
+  Svc -> Svc : valider les informations
   Svc -> DB : UPDATE utilisateur
+  activate DB
   DB --> Svc : confirmation
+  deactivate DB
   Svc --> Ctrl : utilisateur mis à jour
   deactivate Svc
-  Ctrl --> App : 200 OK
+  Ctrl --> UI : confirmation
   deactivate Ctrl
 
-else Supprimer / désactiver un utilisateur
-  Admin -> App : supprimer un utilisateur
-  App -> Ctrl : DELETE /api/users/{id}
+else Désactiver / supprimer un utilisateur
+  Admin -> UI : supprimer un utilisateur
+  UI -> Ctrl : supprimerUtilisateur(id)
   activate Ctrl
   Ctrl -> Svc : supprimerUtilisateur(id)
   activate Svc
   Svc -> DB : DELETE / UPDATE statut
+  activate DB
   DB --> Svc : confirmation
+  deactivate DB
   Svc --> Ctrl : utilisateur supprimé
   deactivate Svc
-  Ctrl --> App : 204 No Content
+  Ctrl --> UI : confirmation
   deactivate Ctrl
 end
 
-Admin -> App : consulter les statistiques
-App -> Ctrl : GET /api/stats
+UI --> Admin : modifications enregistrées
+
+Admin -> UI : consulter les statistiques
+UI -> Ctrl : getStatistiques()
 activate Ctrl
 Ctrl -> Svc : calculerStatistiques()
 activate Svc
-Svc -> DB : agrégations (patients triés, répartition KTAS, cas critiques)
-DB --> Svc : statistiques
+Svc -> DB : agréger (total patients, cas critiques,\npatients en attente, répartition KTAS)
+activate DB
+DB --> Svc : indicateurs
+deactivate DB
 Svc --> Ctrl : statistiques
 deactivate Svc
-Ctrl --> App : 200 OK (tableau de bord)
+Ctrl --> UI : tableau de bord
 deactivate Ctrl
-App --> Admin : afficher les statistiques
-deactivate App
+UI --> Admin : afficher les statistiques
+deactivate UI
 @enduml

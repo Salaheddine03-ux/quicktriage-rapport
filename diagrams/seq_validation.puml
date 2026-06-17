@@ -1,5 +1,5 @@
 @startuml seq_validation
-title Scénario 2 : Validation ou correction du triage
+title Scénario 2 : Validation ou correction médicale
 skinparam dpi 150
 skinparam shadowing false
 skinparam defaultFontName Helvetica
@@ -8,18 +8,23 @@ skinparam ParticipantBackgroundColor #EAF2F8
 skinparam ParticipantBorderColor #1F618D
 skinparam ActorBackgroundColor #D6EAF8
 skinparam ActorBorderColor #1F618D
+skinparam DatabaseBackgroundColor #D5F5E3
+skinparam DatabaseBorderColor #1E8449
 skinparam SequenceLifeLineBorderColor #5D6D7E
 skinparam ArrowColor #2C3E50
 
 actor "Médecin" as Doc
-participant "Application\nAndroid" as App
-participant "TriageController\n(API REST)" as Ctrl
-participant "TriageService\n(EJB)" as Svc
+participant "Interface\nQuickTriage" as UI
+participant "TriageController" as Ctrl
+participant "TriageService" as Svc
 database "Base de\ndonnées" as DB
 
-Doc -> App : consulter la file d'attente
-activate App
-App -> Ctrl : GET /api/triage/queue
+Doc -> UI : s'authentifier
+activate UI
+UI --> Doc : accès autorisé
+
+Doc -> UI : consulter la file d'attente
+UI -> Ctrl : getFileAttente()
 activate Ctrl
 Ctrl -> Svc : getFileAttente()
 activate Svc
@@ -29,18 +34,23 @@ DB --> Svc : liste des évaluations
 deactivate DB
 Svc --> Ctrl : liste
 deactivate Svc
-Ctrl --> App : 200 OK (file d'attente)
+Ctrl --> UI : file d'attente
 deactivate Ctrl
-App --> Doc : afficher résultat + probabilités
 
-alt Le médecin valide la proposition du modèle
-  Doc -> App : valider la décision
-  App -> Ctrl : POST /api/triage/confirm (VALIDER)
-else Le médecin rectifie la décision
-  Doc -> App : modifier la classe + ajouter un commentaire
-  App -> Ctrl : POST /api/triage/confirm (RECTIFIER)
+Doc -> UI : sélectionner un patient
+UI --> Doc : afficher données patient + résultat de prédiction
+
+Doc -> UI : prendre la décision finale
+
+alt Valider la décision du modèle
+  Doc -> UI : valider la proposition
+else Rectifier la classification
+  Doc -> UI : modifier la classe KTAS
+else Ajouter un commentaire médical
+  Doc -> UI : saisir un commentaire médical
 end
 
+UI -> Ctrl : confirmerDecision(evaluation)
 activate Ctrl
 Ctrl -> Svc : enregistrerDecisionFinale(evaluation)
 activate Svc
@@ -48,10 +58,14 @@ Svc -> DB : UPDATE évaluation (décision, commentaire, horodatage)
 activate DB
 DB --> Svc : confirmation
 deactivate DB
-Svc --> Ctrl : dossier patient mis à jour
+Svc -> DB : mettre à jour le dossier patient
+activate DB
+DB --> Svc : dossier mis à jour
+deactivate DB
+Svc --> Ctrl : décision enregistrée
 deactivate Svc
-Ctrl --> App : 200 OK
+Ctrl --> UI : confirmation
 deactivate Ctrl
-App --> Doc : décision finale enregistrée
-deactivate App
+UI --> Doc : décision finale enregistrée
+deactivate UI
 @enduml
