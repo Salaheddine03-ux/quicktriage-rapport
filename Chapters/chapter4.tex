@@ -4,7 +4,7 @@
 Après avoir formalisé les besoins, ce chapitre traduit les exigences de QuickTriage en une
 architecture logicielle cohérente. Nous présentons d'abord l'architecture générale en
 couches, puis nous détaillons chacune des composantes : le pipeline de données et
-d'apprentissage, le backend J2EE exposant le modèle, et le frontend mobile Flutter. Une
+d'apprentissage, le backend J2EE exposant le modèle, et le frontend mobile Android. Une
 section est consacrée à la sécurité des données de santé, particulièrement sensible dans le
 domaine médical. Le chapitre se conclut par les choix d'expérience et d'interface
 utilisateur (UX/UI).
@@ -26,9 +26,9 @@ applicative et l'interface utilisateur. Les trois couches sont les suivantes :
   déployée sur \textbf{WildFly~10}, elle charge le modèle ONNX, applique le même prétraitement
   qu'à l'entraînement, exécute l'inférence et expose le service via une API REST
   \textbf{JAX-RS}.
-  \item \textbf{La couche frontend (\textit{client mobile}).} Réalisée en \textbf{Flutter},
-  elle assure la saisie des constantes vitales, l'appel à l'API et la restitution visuelle du
-  résultat au personnel soignant.
+  \item \textbf{La couche frontend (\textit{client mobile}).} Réalisée sous \textbf{Android}
+  (Android Studio), elle assure la saisie des constantes vitales, l'appel à l'API et la
+  restitution visuelle du résultat au personnel soignant.
 \end{enumerate}
 
 \begin{infobox}
@@ -40,7 +40,7 @@ de Python à l'exécution.
 
 \subsection{Flux global de l'information}
 Le cheminement d'une requête de triage illustre l'articulation des couches : le soignant
-saisit les constantes dans l'application Flutter ; celles-ci sont sérialisées en JSON et
+saisit les constantes dans l'application Android ; celles-ci sont sérialisées en JSON et
 transmises par requête HTTP \texttt{POST} à l'API REST ; le backend désérialise la requête,
 reconstruit le vecteur de caractéristiques, applique l'imputation et la standardisation, puis
 exécute l'inférence ONNX ; le résultat (classe, confiance, probabilités, indicateur de
@@ -59,7 +59,7 @@ Python, pandas, scikit-learn, XGBoost, Optuna, SMOTE, ONNX \\
 Backend (serveur) & Chargement du modèle, prétraitement, inférence, exposition REST &
 Jakarta EE, WildFly 10, JAX-RS, EJB, ONNX Runtime \\
 Frontend (mobile) & Saisie, validation, appel API, restitution visuelle &
-Flutter, Dart, HTTP \\
+Android (Android Studio), Java/Kotlin, Retrofit/HTTP \\
 \bottomrule
 \end{tabular}
 \caption{Responsabilités et technologies des trois couches de QuickTriage.}

@@ -1,52 +1,76 @@
-@startuml
-' Scenario 2 : Detail de l'appel REST et de l'inference cote backend
+@startuml seq_rest
+title Scénario 3 : Gestion des utilisateurs
 skinparam dpi 150
-skinparam backgroundColor #FFFFFF
-skinparam sequence {
-  ArrowColor #14375A
-  LifeLineBorderColor #1F4E79
-  ParticipantBorderColor #1F4E79
-  ParticipantBackgroundColor #EAF1FB
-}
-title Scénario 2 -- Traitement de la requête REST et inférence ONNX
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #EAF2F8
+skinparam ParticipantBorderColor #1F618D
+skinparam ActorBackgroundColor #D6EAF8
+skinparam ActorBorderColor #1F618D
+skinparam SequenceLifeLineBorderColor #5D6D7E
+skinparam ArrowColor #2C3E50
 
-participant "Client\n(Flutter)" as Client
-participant "TriageResource\n(JAX-RS)" as Res
-participant "TriagePredictionService\n(EJB)" as Svc
-participant "ModelMetadata" as Meta
-participant "OnnxModelLoader" as Loader
-participant "OrtSession\n(ONNX Runtime)" as Ort
+actor "Administrateur" as Admin
+participant "Application\nAndroid" as App
+participant "UserController\n(API REST)" as Ctrl
+participant "UserService\n(EJB)" as Svc
+database "Base de\ndonnées" as DB
 
-Client -> Res : POST /api/triage/predict\nContent-Type: application/json
-activate Res
-Res -> Res : Désérialiser le JSON\n-> TriageRequest
-Res -> Svc : predict(request)
-activate Svc
+Admin -> App : accéder à la gestion des utilisateurs
+activate App
 
-Svc -> Meta : load(metadata_v3.json)
-Meta --> Svc : scaler_mean, scaler_scale,\nimputer_medians, seuil
+alt Ajouter un utilisateur
+  Admin -> App : saisir les informations du nouvel utilisateur
+  App -> Ctrl : POST /api/users
+  activate Ctrl
+  Ctrl -> Svc : creerUtilisateur(u)
+  activate Svc
+  Svc -> DB : INSERT utilisateur
+  DB --> Svc : id généré
+  Svc --> Ctrl : utilisateur créé
+  deactivate Svc
+  Ctrl --> App : 201 Created
+  deactivate Ctrl
 
-Svc -> Svc : buildFeatures() -> 23 valeurs
-Svc -> Svc : imputation (médianes)
-Svc -> Svc : standardisation (z-score)
+else Modifier un utilisateur
+  Admin -> App : modifier les informations
+  App -> Ctrl : PUT /api/users/{id}
+  activate Ctrl
+  Ctrl -> Svc : modifierUtilisateur(u)
+  activate Svc
+  Svc -> DB : UPDATE utilisateur
+  DB --> Svc : confirmation
+  Svc --> Ctrl : utilisateur mis à jour
+  deactivate Svc
+  Ctrl --> App : 200 OK
+  deactivate Ctrl
 
-Svc -> Loader : getSession()
-Loader --> Svc : session (chargée au démarrage)
-Svc -> Ort : run({float_input: tensor[1][23]})
-activate Ort
-Ort --> Svc : {label, probabilities}
-deactivate Ort
-
-alt proba[CRITIQUE] >= 0.30
-  Svc -> Svc : ktasClass = CRITIQUE\nisCritical = true
-else sinon
-  Svc -> Svc : ktasClass = argmax(proba)
+else Supprimer / désactiver un utilisateur
+  Admin -> App : supprimer un utilisateur
+  App -> Ctrl : DELETE /api/users/{id}
+  activate Ctrl
+  Ctrl -> Svc : supprimerUtilisateur(id)
+  activate Svc
+  Svc -> DB : DELETE / UPDATE statut
+  DB --> Svc : confirmation
+  Svc --> Ctrl : utilisateur supprimé
+  deactivate Svc
+  Ctrl --> App : 204 No Content
+  deactivate Ctrl
 end
 
-Svc --> Res : TriageResponse
+Admin -> App : consulter les statistiques
+App -> Ctrl : GET /api/stats
+activate Ctrl
+Ctrl -> Svc : calculerStatistiques()
+activate Svc
+Svc -> DB : agrégations (patients triés, répartition KTAS, cas critiques)
+DB --> Svc : statistiques
+Svc --> Ctrl : statistiques
 deactivate Svc
-Res -> Res : Sérialiser -> JSON
-Res --> Client : 200 OK\n{ktasClass, confidence, isCritical,\nprobabilities, modelVersion}
-deactivate Res
-
+Ctrl --> App : 200 OK (tableau de bord)
+deactivate Ctrl
+App --> Admin : afficher les statistiques
+deactivate App
 @enduml

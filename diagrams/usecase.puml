@@ -1,46 +1,83 @@
-@startuml
-' Diagramme de cas d'utilisation global -- QuickTriage
-!pragma layout smetana
-skinparam dpi 150
-skinparam backgroundColor #FFFFFF
-skinparam actorStyle awesome
-skinparam packageStyle rectangle
-skinparam usecase {
-  BackgroundColor #EAF1FB
-  BorderColor #1F4E79
-  FontColor #14375A
-}
+@startuml usecase
 left to right direction
-
-actor "Infirmier de tri\n(Personnel soignant)" as Nurse
-actor "Médecin" as Doctor
-actor "Administrateur" as Admin
-
-rectangle "QuickTriage" {
-  usecase "Saisir les constantes\ndu patient" as UC1
-  usecase "Lancer la prédiction\ndu niveau KTAS" as UC2
-  usecase "Consulter le résultat\n(classe, confiance, délai)" as UC3
-  usecase "Visualiser les\nprobabilités par classe" as UC4
-  usecase "Valider ou corriger\nla proposition" as UC5
-  usecase "Consulter l'historique\ndes triages" as UC6
-  usecase "Gérer / déployer\nle modèle ONNX" as UC7
-  usecase "Consulter la version\ndu modèle" as UC8
+skinparam dpi 150
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam ArrowColor #34495E
+skinparam usecase {
+  BackgroundColor #EAF2F8
+  BorderColor #2471A3
+  FontColor #1B2631
+}
+skinparam rectangle {
+  BorderColor #1F618D
+  BackgroundColor #FBFCFC
+}
+skinparam actor {
+  BackgroundColor #D6EAF8
+  BorderColor #1F618D
 }
 
-Nurse --> UC1
-Nurse --> UC2
-Nurse --> UC3
-Nurse --> UC6
-Doctor --> UC3
-Doctor --> UC4
-Doctor --> UC5
-Doctor --> UC6
-Admin --> UC7
-Admin --> UC8
+actor "Staff médical\n(Infirmier)" as Staff
+actor "Médecin" as Doc
+actor "Administrateur" as Admin
+actor "API REST J2EE" as Api
+actor "Modèle ML\n(XGBoost / ONNX)" as ML
 
-UC2 .> UC1 : <<include>>
-UC3 .> UC2 : <<include>>
-UC4 .> UC3 : <<extend>>
-UC5 .> UC3 : <<extend>>
+rectangle "Système QuickTriage" {
+  usecase "S'authentifier" as UC_Login
+  usecase "Saisir les données\ndu patient" as UC_Data
+  usecase "Remplir le formulaire\nde triage" as UC_Form
+  usecase "Lancer la prédiction\nKTAS" as UC_Predict
+  usecase "Consulter le\nrésultat initial" as UC_Result
+  usecase "Consulter la\nfile d'attente" as UC_Queue
+  usecase "Consulter l'historique\ndes patients" as UC_Hist
+  usecase "Consulter les données\ndétaillées du patient" as UC_Detail
+  usecase "Valider la décision" as UC_Validate
+  usecase "Rectifier la décision" as UC_Rectify
+  usecase "Ajouter un\ncommentaire médical" as UC_Comment
+  usecase "Prendre la\ndécision finale" as UC_Final
+  usecase "Gérer les comptes\ndu staff médical" as UC_MgStaff
+  usecase "Gérer les médecins" as UC_MgDoc
+  usecase "Gérer les patients" as UC_MgPat
+  usecase "Consulter les\nstatistiques" as UC_Stats
+  usecase "Consulter les\nhistoriques système" as UC_SysHist
+}
 
+' --- Staff médical ---
+Staff --> UC_Login
+Staff --> UC_Form
+Staff --> UC_Predict
+Staff --> UC_Result
+Staff --> UC_Queue
+Staff --> UC_Hist
+
+' --- Médecin ---
+Doc --> UC_Login
+Doc --> UC_Queue
+Doc --> UC_Detail
+Doc --> UC_Result
+Doc --> UC_Final
+
+' --- Administrateur ---
+Admin --> UC_Login
+Admin --> UC_MgStaff
+Admin --> UC_MgDoc
+Admin --> UC_MgPat
+Admin --> UC_Stats
+Admin --> UC_SysHist
+
+' --- Acteurs techniques ---
+UC_Predict --> Api
+Api --> ML
+
+' --- Relations entre cas d'utilisation ---
+UC_Form ..> UC_Data : <<include>>
+UC_Predict ..> UC_Form : <<include>>
+UC_Final ..> UC_Result : <<include>>
+UC_Validate .> UC_Final : <<extend>>
+UC_Rectify .> UC_Final : <<extend>>
+UC_Comment .> UC_Final : <<extend>>
 @enduml

@@ -1,45 +1,46 @@
-@startuml
-' Scenario 1 : Cycle complet d'une demande de triage (saisie -> prediction -> affichage)
+@startuml seq_triage
+title Scénario 1 : Réalisation d'un triage
 skinparam dpi 150
-skinparam backgroundColor #FFFFFF
-skinparam sequence {
-  ArrowColor #14375A
-  LifeLineBorderColor #1F4E79
-  ParticipantBorderColor #1F4E79
-  ParticipantBackgroundColor #EAF1FB
-  ActorBorderColor #1F4E79
-}
-title Scénario 1 -- Cycle complet d'une demande de triage
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #EAF2F8
+skinparam ParticipantBorderColor #1F618D
+skinparam ActorBackgroundColor #D6EAF8
+skinparam ActorBorderColor #1F618D
+skinparam SequenceLifeLineBorderColor #5D6D7E
+skinparam ArrowColor #2C3E50
 
-actor "Infirmier de tri" as Nurse
-participant "Application\nFlutter" as App
-participant "TriageApiService" as Api
-participant "TriageResource\n(JAX-RS)" as Res
-participant "TriagePredictionService\n(EJB)" as Svc
-participant "OnnxModelLoader\n(Singleton)" as Loader
-database "Modèle ONNX" as Model
+actor "Staff médical\n(Infirmier)" as Staff
+participant "Application\nAndroid" as App
+participant "TriageController\n(API REST JAX-RS)" as Ctrl
+participant "TriageService\n(EJB)" as Svc
+participant "Modèle ML\n(ONNX)" as ML
 
-Nurse -> App : Saisir les constantes\n(age, SBP, HR, RR, BT, SpO2, douleur...)
-App -> App : Valider les champs
-App -> Api : predict(VitalsModel)
-Api -> Res : POST /api/triage/predict (JSON)
-activate Res
-Res -> Svc : predict(TriageRequest)
+Staff -> App : saisir les données du patient
+activate App
+App -> App : valider les champs (bornes physiologiques)
+
+App -> Ctrl : POST /api/triage/predict (JSON)
+activate Ctrl
+Ctrl -> Svc : predire(evaluation)
 activate Svc
-Svc -> Svc : buildFeatures() (23 features)
-Svc -> Svc : normalize() via StandardScaler\n(metadata_v3.json)
-Svc -> Loader : getSession()
-Loader --> Svc : OrtSession
-Svc -> Model : run(float_input)
-activate Model
-Model --> Svc : label + probabilities
-deactivate Model
-Svc -> Svc : applyThreshold(seuil=0.30 CRITIQUE)
-Svc --> Res : TriageResponse
-deactivate Svc
-Res --> Api : 200 OK (JSON)
-deactivate Res
-Api --> App : TriageResultModel
-App -> Nurse : Afficher classe + confiance + délai\n(code couleur de priorité)
 
+Svc -> Svc : buildFeatures() + normalize()
+Svc -> ML : predire(features)
+activate ML
+ML -> ML : inférence XGBoost / ONNX
+ML --> Svc : probabilités par classe
+deactivate ML
+
+Svc -> Svc : applyThreshold() (seuil CRITIQUE = 0.30)
+Svc --> Ctrl : PredictionResult
+deactivate Svc
+
+Ctrl --> App : 200 OK (classe, confiance, probabilités)
+deactivate Ctrl
+
+App -> App : afficher le résultat (code couleur de priorité)
+App --> Staff : résultat KTAS initial
+deactivate App
 @enduml

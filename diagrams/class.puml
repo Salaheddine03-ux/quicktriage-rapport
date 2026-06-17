@@ -1,14 +1,95 @@
-@startuml
-' Diagramme de classes -- QuickTriage (backend J2EE + modeles frontend)
-!pragma layout smetana
+@startuml class
 skinparam dpi 150
-skinparam backgroundColor #FFFFFF
-skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam linetype ortho
+skinparam ArrowColor #34495E
 skinparam class {
-  BackgroundColor #EAF1FB
-  BorderColor #1F4E79
-  ArrowColor #14375A
-  FontColor #14375A
+  BackgroundColor #FBFCFC
+  BorderColor #1F618D
+  ArrowColor #34495E
+  AttributeFontColor #1B2631
+}
+hide circle
+
+' ====================== UTILISATEURS ======================
+abstract class Utilisateur {
+  - idUtilisateur : Long
+  - nom : String
+  - prenom : String
+  - email : String
+  - motDePasse : String
+  - role : String
+  + seConnecter() : boolean
+  + seDeconnecter() : void
+}
+
+class StaffMedical {
+  - matricule : String
+  - service : String
+  + remplirFormulaire(p : Patient) : EvaluationTriage
+  + lancerPrediction(e : EvaluationTriage) : PredictionResult
+  + consulterFileAttente() : List<EvaluationTriage>
+  + consulterHistorique() : List<EvaluationTriage>
+}
+
+class Medecin {
+  - specialite : String
+  + consulterResultat(e : EvaluationTriage) : PredictionResult
+  + validerDecision(e : EvaluationTriage) : void
+  + rectifierDecision(e : EvaluationTriage, c : KtasClass) : void
+  + ajouterCommentaire(e : EvaluationTriage, txt : String) : void
+  + prendreDecisionFinale(e : EvaluationTriage) : void
+}
+
+class Administrateur {
+  + gererStaff(u : StaffMedical) : void
+  + gererMedecins(m : Medecin) : void
+  + gererPatients(p : Patient) : void
+  + consulterStatistiques() : Statistiques
+  + consulterHistoriqueSysteme() : List<Log>
+}
+
+Utilisateur <|-- StaffMedical
+Utilisateur <|-- Medecin
+Utilisateur <|-- Administrateur
+
+' ====================== DOMAINE METIER ======================
+class Patient {
+  - idPatient : Long
+  - nom : String
+  - prenom : String
+  - age : int
+  - sexe : char
+  - numeroDossier : String
+  + getDossier() : String
+}
+
+class EvaluationTriage {
+  - idEvaluation : Long
+  - dateHeure : DateTime
+  - sbp : float
+  - dbp : float
+  - hr : float
+  - rr : float
+  - bt : float
+  - saturation : float
+  - nrsPain : int
+  - etatMental : int
+  - statut : String
+  - decisionFinale : KtasClass
+  - commentaireMedical : String
+  + getFeatures() : float[]
+}
+
+class PredictionResult {
+  - idResultat : Long
+  - classeKTAS : KtasClass
+  - scoreConfiance : float
+  - probabilites : Map<KtasClass, Float>
+  - isCritical : boolean
+  - modelVersion : String
+  - dateGeneration : DateTime
 }
 
 enum KtasClass {
@@ -17,90 +98,45 @@ enum KtasClass {
   NON_URGENT
 }
 
-class TriageRequest <<DTO>> {
-  - int age
-  - int mental
-  - int nrsPain
-  - double sbp
-  - double dbp
-  - double hr
-  - double rr
-  - double bt
-  - double saturation
-  - int pain
-  - int injury
-  - int arrivalMode
+Patient "1" --o "*" EvaluationTriage : concerne
+StaffMedical "1" --> "*" EvaluationTriage : réalise
+Medecin "1" --> "*" EvaluationTriage : valide
+EvaluationTriage "1" *-- "1" PredictionResult : produit
+EvaluationTriage --> KtasClass
+PredictionResult --> KtasClass
+
+' ====================== COUCHE BACKEND J2EE ======================
+interface ApiRest {
+  + recevoirDonnees(req : TriageRequest) : Response
+  + preparerDonnees(req : TriageRequest) : float[]
+  + appelerModele(features : float[]) : PredictionResult
+  + retournerResultat(res : PredictionResult) : Response
 }
 
-class TriageResponse <<DTO>> {
-  - KtasClass ktasClass
-  - String ktasLevels
-  - int delaiMax
-  - double confidence
-  - boolean isCritical
-  - Map<String,Double> probabilities
-  - String modelVersion
+class TriageController {
+  + predict(req : TriageRequest) : Response
+  + getFileAttente() : Response
+  + confirmDecision(req : DecisionRequest) : Response
 }
 
-class TriageResource <<@Path /api/triage>> {
-  + Response predict(TriageRequest req)
+class TriageService {
+  + buildFeatures(e : EvaluationTriage) : float[]
+  + normalize(f : float[]) : float[]
+  + applyThreshold(proba : float[]) : PredictionResult
+  + predire(e : EvaluationTriage) : PredictionResult
 }
 
-class TriagePredictionService <<@Stateless EJB>> {
-  + TriageResponse predict(TriageRequest req)
-  - float[] buildFeatures(TriageRequest req)
-  - float[] normalize(float[] raw)
-  - TriageResponse applyThreshold(float[] proba)
+class ModeleML {
+  - session : OrtSession
+  - seuilCritique : float
+  + recevoirFeatures(f : float[]) : void
+  + predire() : float[]
+  + retournerScore() : PredictionResult
 }
 
-class OnnxModelLoader <<@Singleton @Startup>> {
-  - OrtEnvironment env
-  - OrtSession session
-  + void init()
-  + OrtSession getSession()
-  + void close()
-}
-
-class ModelMetadata {
-  - double[] scalerMean
-  - double[] scalerScale
-  - double[] imputerMedians
-  - double seuilCritique
-  - String modelVersion
-  + static ModelMetadata load(String path)
-}
-
-' --- Frontend Flutter ---
-class VitalsModel <<Flutter>> {
-  + int age
-  + double sbp
-  + double hr
-  + ... 
-  + Map<String,dynamic> toJson()
-}
-
-class TriageResultModel <<Flutter>> {
-  + String ktasClass
-  + double confidence
-  + bool isCritical
-  + Map<String,double> probabilities
-  + factory fromJson(json)
-}
-
-class TriageApiService <<Flutter>> {
-  + Future<TriageResultModel> predict(VitalsModel v)
-}
-
-TriageResource ..> TriageRequest : consume
-TriageResource ..> TriageResponse : produce
-TriageResource --> TriagePredictionService : @Inject
-TriagePredictionService --> OnnxModelLoader : @Inject
-TriagePredictionService --> ModelMetadata : utilise
-TriagePredictionService ..> TriageResponse : crée
-TriageResponse o-- KtasClass
-
-TriageApiService ..> VitalsModel : sérialise
-TriageApiService ..> TriageResultModel : désérialise
-TriageApiService ..> TriageResource : HTTP POST
-
+TriageController ..|> ApiRest
+TriageController "1" --> "1" TriageService : délègue
+TriageService "1" --> "1" ModeleML : appelle
+TriageService ..> EvaluationTriage : exploite
+TriageService ..> PredictionResult : crée
 @enduml

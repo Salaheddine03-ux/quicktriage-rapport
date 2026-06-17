@@ -6,14 +6,21 @@ normalisée de la structure et du comportement du système. Ce chapitre détaill
 QuickTriage à travers trois familles de diagrammes complémentaires : le diagramme de cas
 d'utilisation, qui décrit les interactions des acteurs avec le système ; le diagramme de
 classes, qui en présente la structure statique ; et trois diagrammes de séquence, qui en
-illustrent le comportement dynamique sur des scénarios représentatifs.
+illustrent le comportement dynamique sur des scénarios représentatifs. Conformément à
+l'architecture retenue, le système associe une application mobile \textbf{Android} (développée
+sous Android Studio), un backend \textbf{J2EE} exposant une API REST, et un \textbf{modèle
+d'apprentissage automatique} (XGBoost exporté au format ONNX) dédié à la prédiction du niveau
+de triage KTAS.
 
 \section{Diagramme de cas d'utilisation}
 
 \subsection{Présentation}
 Le diagramme de cas d'utilisation (figure~\ref{fig:usecase}) recense les fonctionnalités
-offertes par QuickTriage et les associe aux trois acteurs identifiés au chapitre~3 :
-l'infirmier de tri, le médecin et l'administrateur.
+offertes par QuickTriage et les associe aux acteurs identifiés au chapitre~3. On distingue
+\textbf{trois acteurs humains} -- le staff médical (infirmier de tri), le médecin et
+l'administrateur -- ainsi que \textbf{deux acteurs techniques} -- l'API REST J2EE et le modèle
+d'apprentissage automatique -- qui participent au déroulement de la prédiction sans être des
+utilisateurs au sens strict.
 
 \begin{figure}[h]
 \centering
@@ -23,141 +30,188 @@ l'infirmier de tri, le médecin et l'administrateur.
 \end{figure}
 
 \subsection{Analyse}
-L'\textbf{infirmier de tri}, acteur principal, concentre le cœur du parcours opérationnel :
-saisir les constantes, lancer la prédiction, consulter le résultat et accéder à l'historique.
-Le \textbf{médecin} intervient en supervision : il consulte le résultat, visualise le détail
-des probabilités et valide ou corrige la proposition du système. L'\textbf{administrateur}
-prend en charge les tâches techniques : déploiement du modèle ONNX et consultation de sa
-version.
+Le \textbf{staff médical (infirmier de tri)}, acteur principal, concentre le cœur du parcours
+opérationnel : il s'authentifie, remplit le formulaire de triage (qui inclut la saisie des
+données du patient), lance la prédiction KTAS, consulte le résultat initial, et accède à la
+file d'attente ainsi qu'à l'historique des patients. Le \textbf{médecin} intervient en
+supervision clinique : il consulte la file d'attente, visualise les données détaillées du
+patient et le résultat proposé, puis prend la décision finale. Cette décision finale peut, par
+extension, se traduire par une \textit{validation} de la proposition du modèle, une
+\textit{rectification} de la classe, ou l'ajout d'un \textit{commentaire médical}.
+L'\textbf{administrateur} prend en charge la gouvernance du système : gestion des comptes du
+staff médical, des médecins et des patients, consultation des statistiques et des historiques
+système.
+
+Les \textbf{acteurs techniques} formalisent la chaîne de prédiction : le cas « Lancer la
+prédiction KTAS » sollicite l'\textbf{API REST J2EE}, qui à son tour invoque le \textbf{modèle
+ML}. Cette représentation rend explicite la frontière entre le client mobile et les services
+serveur.
 
 Les relations entre cas d'utilisation précisent la logique fonctionnelle. La relation
-\texttt{<<include>>} entre « Lancer la prédiction » et « Saisir les constantes » traduit le
-fait que la prédiction présuppose nécessairement une saisie préalable ; de même, « Consulter le
-résultat » inclut la prédiction. Les relations \texttt{<<extend>>} reliant « Visualiser les
-probabilités » et « Valider ou corriger » à « Consulter le résultat » expriment des
-comportements optionnels, déclenchés à la discrétion de l'utilisateur. Cette structuration
-garantit que l'acte de triage reste rapide par défaut, tout en autorisant un approfondissement
-sur demande.
+\texttt{<<include>>} entre « Remplir le formulaire de triage » et « Saisir les données du
+patient » traduit le fait que le formulaire intègre nécessairement la saisie des informations
+patient ; de même, « Lancer la prédiction KTAS » inclut le remplissage préalable du formulaire,
+et « Prendre la décision finale » inclut la consultation du résultat. Les relations
+\texttt{<<extend>>} reliant « Valider la décision », « Rectifier la décision » et « Ajouter un
+commentaire médical » à « Prendre la décision finale » expriment des comportements optionnels,
+déclenchés à la discrétion du médecin. Cette structuration garantit que l'acte de triage reste
+rapide par défaut, tout en autorisant une supervision clinique approfondie sur demande.
 
 \section{Diagramme de classes}
 
 \subsection{Présentation}
-Le diagramme de classes (figure~\ref{fig:classes}) décrit la structure statique de la solution,
-en distinguant les composants du backend J2EE et les modèles du frontend Flutter.
+Le diagramme de classes (figure~\ref{fig:classes}) décrit la structure statique de la solution.
+Il s'organise en trois ensembles cohérents : la hiérarchie des \textbf{utilisateurs}, le
+\textbf{domaine métier} (patient, évaluation de triage, résultat de prédiction) et la
+\textbf{couche backend J2EE} qui orchestre la prédiction.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{figures/class.png}
-\caption{Diagramme de classes de QuickTriage (backend J2EE et modèles frontend).}
+\caption{Diagramme de classes de QuickTriage (utilisateurs, domaine métier et couche backend J2EE).}
 \label{fig:classes}
 \end{figure}
 
-\subsection{Analyse des classes du backend}
-Le backend s'organise autour de cinq classes et d'une énumération :
+\subsection{Analyse de la hiérarchie des utilisateurs}
+La classe abstraite \texttt{Utilisateur} factorise les attributs communs (identifiant, nom,
+prénom, courriel, mot de passe, rôle) et les opérations d'authentification
+(\texttt{seConnecter()}, \texttt{seDeconnecter()}). Trois classes en héritent, conformément au
+principe de spécialisation :
 \begin{itemize}
-  \item \texttt{TriageRequest} et \texttt{TriageResponse} sont des \textbf{DTO}
-  (\textit{Data Transfer Objects}). Le premier transporte les constantes vitales saisies
-  (âge, état mental, douleur, SBP, DBP, HR, RR, BT, saturation, etc.) ; le second véhicule le
-  résultat (classe KTAS, délai maximal, confiance, indicateur \texttt{isCritical}, probabilités
-  par classe et version du modèle).
-  \item \texttt{TriageResource} est la ressource \textbf{JAX-RS} (\texttt{@Path /api/triage})
-  qui consomme un \texttt{TriageRequest} et produit un \texttt{TriageResponse}. Elle délègue le
-  traitement au service métier.
-  \item \texttt{TriagePredictionService} est l'\textbf{EJB \texttt{@Stateless}} qui orchestre
-  la prédiction : \texttt{buildFeatures()} construit le vecteur, \texttt{normalize()} applique
-  la standardisation et \texttt{applyThreshold()} décide de la classe selon le seuil de
-  criticité.
-  \item \texttt{OnnxModelLoader} est le bean \textbf{\texttt{@Singleton @Startup}} qui détient
-  l'\texttt{OrtEnvironment} et l'\texttt{OrtSession}, initialisés une fois au démarrage et
-  exposés via \texttt{getSession()}.
-  \item \texttt{ModelMetadata} encapsule les paramètres de prétraitement chargés depuis
-  \texttt{metadata\_v3.json} (moyennes et écarts-types du scaler, médianes de l'imputeur, seuil
-  de la classe \textsc{Critique}, version du modèle).
+  \item \texttt{StaffMedical} ajoute les attributs \texttt{matricule} et \texttt{service}, ainsi
+  que les opérations opérationnelles : \texttt{remplirFormulaire()}, \texttt{lancerPrediction()},
+  \texttt{consulterFileAttente()} et \texttt{consulterHistorique()}.
+  \item \texttt{Medecin} introduit l'attribut \texttt{specialite} et les opérations de
+  supervision clinique : \texttt{consulterResultat()}, \texttt{validerDecision()},
+  \texttt{rectifierDecision()}, \texttt{ajouterCommentaire()} et \texttt{prendreDecisionFinale()}.
+  \item \texttt{Administrateur} regroupe les opérations de gouvernance : \texttt{gererStaff()},
+  \texttt{gererMedecins()}, \texttt{gererPatients()}, \texttt{consulterStatistiques()} et
+  \texttt{consulterHistoriqueSysteme()}.
+\end{itemize}
+Le recours à l'héritage (\textit{généralisation}) évite la duplication des attributs communs et
+traduit fidèlement la diversité des rôles définie dans le diagramme de cas d'utilisation.
+
+\subsection{Analyse du domaine métier}
+Trois classes et une énumération structurent le domaine :
+\begin{itemize}
+  \item \texttt{Patient} décrit l'identité administrative et clinique du patient (identifiant,
+  nom, prénom, âge, sexe, numéro de dossier).
+  \item \texttt{EvaluationTriage} est la classe pivot : elle porte l'horodatage, l'ensemble des
+  constantes vitales saisies (SBP, DBP, HR, RR, BT, saturation, score de douleur NRS, état
+  mental), le statut, la décision finale (\texttt{decisionFinale}) et le commentaire médical. Sa
+  méthode \texttt{getFeatures()} construit le vecteur de caractéristiques destiné au modèle.
+  \item \texttt{PredictionResult} encapsule le résultat de l'inférence : classe KTAS prédite,
+  score de confiance, carte des probabilités par classe, indicateur \texttt{isCritical}, version
+  du modèle et date de génération.
   \item L'énumération \texttt{KtasClass} matérialise les trois classes métier : \texttt{CRITIQUE},
   \texttt{URGENT} et \texttt{NON\_URGENT}.
 \end{itemize}
+Les associations expriment la sémantique métier : un \texttt{Patient} est \textit{concerné} par
+plusieurs \texttt{EvaluationTriage} (agrégation) ; un \texttt{StaffMedical} \textit{réalise} des
+évaluations tandis qu'un \texttt{Medecin} les \textit{valide} ; chaque \texttt{EvaluationTriage}
+\textit{produit} exactement un \texttt{PredictionResult} (composition forte). Les évaluations et
+les résultats référencent l'énumération \texttt{KtasClass}.
 
-Les associations traduisent les dépendances d'injection (\texttt{@Inject}) : la ressource
-dépend du service, qui dépend lui-même du chargeur de modèle et exploite les métadonnées. Ce
-graphe de dépendances reflète fidèlement la séparation des responsabilités décrite au
-chapitre~4.
-
-\subsection{Analyse des modèles du frontend}
-Côté Flutter, trois classes assurent le miroir client : \texttt{VitalsModel} représente les
-constantes saisies et fournit une méthode \texttt{toJson()} de sérialisation ;
-\texttt{TriageResultModel} représente le résultat et propose une fabrique \texttt{fromJson()}
-de désérialisation ; \texttt{TriageApiService} encapsule l'appel HTTP \texttt{POST} vers la
-ressource REST, sérialisant la requête et désérialisant la réponse. Cette symétrie entre les
-DTO du backend et les modèles du frontend garantit un contrat d'échange clair et maintenable.
+\subsection{Analyse de la couche backend J2EE}
+La couche serveur applique une séparation stricte des responsabilités :
+\begin{itemize}
+  \item L'interface \texttt{ApiRest} formalise le contrat d'échange : réception des données
+  (\texttt{recevoirDonnees()}), préparation (\texttt{preparerDonnees()}), appel du modèle
+  (\texttt{appelerModele()}) et restitution du résultat (\texttt{retournerResultat()}).
+  \item \texttt{TriageController} \textbf{implémente} \texttt{ApiRest} (ressource JAX-RS). Il
+  expose les points d'entrée REST : \texttt{predict()}, \texttt{getFileAttente()} et
+  \texttt{confirmDecision()}, et \textit{délègue} le traitement au service métier.
+  \item \texttt{TriageService} est l'\textbf{EJB} qui orchestre la prédiction :
+  \texttt{buildFeatures()} construit le vecteur, \texttt{normalize()} applique la standardisation,
+  \texttt{applyThreshold()} décide de la classe selon le seuil de criticité, et \texttt{predire()}
+  coordonne l'ensemble. Le service \textit{exploite} les \texttt{EvaluationTriage} et \textit{crée}
+  les \texttt{PredictionResult}.
+  \item \texttt{ModeleML} encapsule l'inférence : il détient la session ONNX (\texttt{session})
+  et le seuil de criticité (\texttt{seuilCritique}), reçoit les caractéristiques
+  (\texttt{recevoirFeatures()}), exécute la prédiction (\texttt{predire()}) et retourne le score
+  (\texttt{retournerScore()}).
+\end{itemize}
+Ce graphe de dépendances (\texttt{TriageController} $\rightarrow$ \texttt{TriageService}
+$\rightarrow$ \texttt{ModeleML}) reflète fidèlement la séparation en couches décrite au
+chapitre~4 et garantit la testabilité et la maintenabilité de la solution.
 
 \section{Diagrammes de séquence}
 Les diagrammes de séquence décrivent les interactions temporelles entre les objets pour trois
-scénarios représentatifs : le cycle complet d'une demande de triage, le détail de l'appel REST
-et de l'inférence, et la validation clinique avec historisation.
+scénarios représentatifs : la réalisation d'un triage, la validation ou la correction de la
+décision par le médecin, et la gestion des utilisateurs par l'administrateur.
 
-\subsection{Scénario 1 : cycle complet d'une demande de triage}
+\subsection{Scénario 1 : réalisation d'un triage}
 Le premier scénario (figure~\ref{fig:seqtriage}) retrace le parcours nominal de bout en bout,
-depuis la saisie des constantes par l'infirmier jusqu'à l'affichage du résultat coloré.
+depuis la saisie des données par le staff médical jusqu'à l'affichage du résultat coloré.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{figures/seq_triage.png}
-\caption{Scénario 1 -- Cycle complet d'une demande de triage.}
+\caption{Scénario 1 -- Réalisation d'un triage.}
 \label{fig:seqtriage}
 \end{figure}
 
-\noindent Ce diagramme met en évidence la chaîne d'appels : l'application Flutter valide les
-champs puis invoque \texttt{TriageApiService}, qui émet une requête \texttt{POST} vers
-\texttt{TriageResource}. Le service métier construit et normalise les caractéristiques, sollicite
-la session ONNX maintenue par \texttt{OnnxModelLoader}, applique le seuil de criticité (0,30 pour
-la classe \textsc{Critique}) et retourne la réponse. Le résultat remonte jusqu'à l'interface, où
-il est affiché avec le code couleur de priorité. On observe que le chargement du modèle n'apparaît
-pas dans ce flux : il a eu lieu une fois pour toutes au démarrage du serveur.
+\noindent Ce diagramme met en évidence la chaîne d'appels : l'application Android valide les
+champs selon des bornes physiologiques puis émet une requête \texttt{POST /api/triage/predict}
+vers \texttt{TriageController}. Celui-ci délègue à \texttt{TriageService}, qui construit et
+normalise les caractéristiques (\texttt{buildFeatures()}, \texttt{normalize()}), puis sollicite
+le \texttt{ModeleML} pour l'inférence XGBoost/ONNX. Le service applique ensuite le seuil de
+criticité (0,30 pour la classe \textsc{Critique}) via \texttt{applyThreshold()} et retourne un
+\texttt{PredictionResult}. Le résultat remonte jusqu'à l'interface, où il est affiché avec le
+code couleur de priorité. On observe que le chargement du modèle n'apparaît pas dans ce flux :
+il a eu lieu une fois pour toutes au démarrage du serveur.
 
-\subsection{Scénario 2 : traitement de la requête REST et inférence ONNX}
-Le deuxième scénario (figure~\ref{fig:seqrest}) zoome sur le traitement côté backend, en
-détaillant les étapes de prétraitement et la logique de décision.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{figures/seq_rest.png}
-\caption{Scénario 2 -- Traitement de la requête REST et inférence ONNX.}
-\label{fig:seqrest}
-\end{figure}
-
-\noindent Après désérialisation du JSON en \texttt{TriageRequest}, le service charge les
-métadonnées (\texttt{ModelMetadata}), construit les 23 caractéristiques, applique l'imputation par
-médianes puis la standardisation z-score. Il récupère ensuite la session auprès du chargeur et
-exécute l'inférence sur un tenseur de forme $[1][23]$. Le fragment \texttt{alt} formalise la
-règle de décision orientée sécurité : si la probabilité de la classe \textsc{Critique} atteint le
-seuil de 0,30, le patient est classé \textsc{Critique} et \texttt{isCritical} est positionné à
-vrai ; sinon, la classe retenue est celle de probabilité maximale. La réponse JSON consolide
-l'ensemble des informations (classe, confiance, probabilités, version du modèle).
-
-\subsection{Scénario 3 : validation clinique et historisation}
-Le troisième scénario (figure~\ref{fig:seqvalid}) illustre l'intervention du médecin, qui valide
-ou corrige la proposition, ainsi que l'historisation de la décision finale.
+\subsection{Scénario 2 : validation ou correction du triage}
+Le deuxième scénario (figure~\ref{fig:seqvalid}) illustre l'intervention du médecin, qui
+consulte la file d'attente puis valide ou rectifie la proposition du modèle, avec historisation
+de la décision finale.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{figures/seq_validation.png}
-\caption{Scénario 3 -- Validation clinique et historisation du triage.}
+\caption{Scénario 2 -- Validation ou correction du triage.}
 \label{fig:seqvalid}
 \end{figure}
 
-\noindent Le médecin consulte la proposition assortie des probabilités. Le fragment \texttt{alt}
-distingue deux issues : la validation du niveau proposé ou sa correction (par exemple le passage
-d'\textsc{Urgent} à \textsc{Critique}). Dans les deux cas, la décision est transmise via
-\texttt{POST /api/triage/confirm} et enregistrée dans l'historique des triages avec son
-horodatage et la version du modèle. La note finale du diagramme rappelle le principe cardinal de
-QuickTriage : \textbf{la décision clinique finale prévaut toujours sur la proposition du modèle}.
-Ce scénario matérialise ainsi l'exigence de traçabilité et le positionnement du système comme
-simple aide à la décision.
+\noindent Le médecin consulte d'abord la file d'attente : l'application émet un
+\texttt{GET /api/triage/queue}, que \texttt{TriageController} relaie à \texttt{TriageService}
+(\texttt{getFileAttente()}), lequel interroge la base de données. L'interface affiche alors le
+résultat assorti des probabilités. Le fragment \texttt{alt} distingue deux issues : la
+\textit{validation} du niveau proposé ou sa \textit{rectification} (par exemple le passage
+d'\textsc{Urgent} à \textsc{Critique}, accompagné d'un commentaire). Dans les deux cas, la
+décision est transmise via \texttt{POST /api/triage/confirm} ; le service enregistre la décision
+finale en base (\texttt{UPDATE} de l'évaluation avec décision, commentaire et horodatage). Ce
+scénario matérialise l'exigence de traçabilité et le principe cardinal de QuickTriage : \textbf{la
+décision clinique finale prévaut toujours sur la proposition du modèle}.
+
+\subsection{Scénario 3 : gestion des utilisateurs}
+Le troisième scénario (figure~\ref{fig:sequsers}) décrit les opérations d'administration des
+comptes, réservées à l'administrateur, ainsi que la consultation des statistiques.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{figures/seq_rest.png}
+\caption{Scénario 3 -- Gestion des utilisateurs.}
+\label{fig:sequsers}
+\end{figure}
+
+\noindent L'administrateur accède au module de gestion des utilisateurs servi par
+\texttt{UserController} et \texttt{UserService}. Le fragment \texttt{alt} formalise les trois
+opérations CRUD : l'\textit{ajout} d'un utilisateur (\texttt{POST /api/users} aboutissant à un
+\texttt{201 Created}), la \textit{modification} (\texttt{PUT /api/users/\{id\}} aboutissant à un
+\texttt{200 OK}) et la \textit{suppression ou désactivation} (\texttt{DELETE /api/users/\{id\}}
+aboutissant à un \texttt{204 No Content}). Chaque opération est répercutée en base de données.
+Le scénario se conclut par la consultation des statistiques (\texttt{GET /api/stats}), où le
+service calcule des agrégations (nombre de patients triés, répartition par classe KTAS, nombre
+de cas critiques) restituées sous forme de tableau de bord. Ce scénario illustre la gouvernance
+du système et la séparation nette entre les fonctions opérationnelles et les fonctions
+d'administration.
 
 \section*{Conclusion du chapitre}
 Ce chapitre a formalisé la conception détaillée de QuickTriage au moyen de la modélisation UML :
-le diagramme de cas d'utilisation a clarifié les interactions des acteurs, le diagramme de classes
-a exposé la structure statique des couches backend et frontend, et les trois diagrammes de séquence
+le diagramme de cas d'utilisation a clarifié les interactions des cinq acteurs (trois humains et
+deux techniques), le diagramme de classes a exposé la structure statique de la hiérarchie des
+utilisateurs, du domaine métier et de la couche backend J2EE, et les trois diagrammes de séquence
 ont décrit le comportement dynamique du système sur des scénarios représentatifs. Ces modèles
 établissent un pont rigoureux entre l'architecture du chapitre précédent et l'implémentation
 concrète, objet du chapitre suivant.

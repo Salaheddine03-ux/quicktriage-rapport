@@ -1,46 +1,57 @@
-@startuml
-' Scenario 3 : Validation / correction clinique et historisation
+@startuml seq_validation
+title Scénario 2 : Validation ou correction du triage
 skinparam dpi 150
-skinparam backgroundColor #FFFFFF
-skinparam sequence {
-  ArrowColor #14375A
-  LifeLineBorderColor #1F4E79
-  ParticipantBorderColor #1F4E79
-  ParticipantBackgroundColor #EAF1FB
-  ActorBorderColor #1F4E79
-}
-title Scénario 3 -- Validation clinique et historisation du triage
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #EAF2F8
+skinparam ParticipantBorderColor #1F618D
+skinparam ActorBackgroundColor #D6EAF8
+skinparam ActorBorderColor #1F618D
+skinparam SequenceLifeLineBorderColor #5D6D7E
+skinparam ArrowColor #2C3E50
 
-actor "Médecin" as Doctor
-participant "Application\nFlutter" as App
-participant "TriageApiService" as Api
-participant "TriageResource" as Res
-database "Historique\ndes triages" as Hist
+actor "Médecin" as Doc
+participant "Application\nAndroid" as App
+participant "TriageController\n(API REST)" as Ctrl
+participant "TriageService\n(EJB)" as Svc
+database "Base de\ndonnées" as DB
 
-Doctor -> App : Consulter la proposition\n(classe CRITIQUE, confiance 84%)
-App -> Doctor : Afficher détails + probabilités
+Doc -> App : consulter la file d'attente
+activate App
+App -> Ctrl : GET /api/triage/queue
+activate Ctrl
+Ctrl -> Svc : getFileAttente()
+activate Svc
+Svc -> DB : SELECT évaluations en attente
+activate DB
+DB --> Svc : liste des évaluations
+deactivate DB
+Svc --> Ctrl : liste
+deactivate Svc
+Ctrl --> App : 200 OK (file d'attente)
+deactivate Ctrl
+App --> Doc : afficher résultat + probabilités
 
-alt Le médecin valide la proposition
-  Doctor -> App : Valider le niveau proposé
-  App -> Api : confirmTriage(resultId, validated=true)
-else Le médecin corrige le niveau
-  Doctor -> App : Corriger (ex. URGENT -> CRITIQUE)
-  App -> Api : confirmTriage(resultId, correctedClass)
+alt Le médecin valide la proposition du modèle
+  Doc -> App : valider la décision
+  App -> Ctrl : POST /api/triage/confirm (VALIDER)
+else Le médecin rectifie la décision
+  Doc -> App : modifier la classe + ajouter un commentaire
+  App -> Ctrl : POST /api/triage/confirm (RECTIFIER)
 end
 
-Api -> Res : POST /api/triage/confirm (JSON)
-activate Res
-Res -> Hist : enregistrer(triage, décision finale,\nhorodatage, modelVersion)
-Hist --> Res : OK
-Res --> Api : 200 OK
-deactivate Res
-Api --> App : Confirmation
-App -> Doctor : Triage enregistré\n(traçabilité assurée)
-
-note over Hist
-  La décision clinique finale
-  prévaut toujours sur la
-  proposition du modèle.
-end note
-
+activate Ctrl
+Ctrl -> Svc : enregistrerDecisionFinale(evaluation)
+activate Svc
+Svc -> DB : UPDATE évaluation (décision, commentaire, horodatage)
+activate DB
+DB --> Svc : confirmation
+deactivate DB
+Svc --> Ctrl : dossier patient mis à jour
+deactivate Svc
+Ctrl --> App : 200 OK
+deactivate Ctrl
+App --> Doc : décision finale enregistrée
+deactivate App
 @enduml

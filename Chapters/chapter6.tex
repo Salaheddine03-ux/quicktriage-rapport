@@ -36,8 +36,8 @@ trois couches. Le tableau~\ref{tab:stack} en récapitule la pile, avec les versi
  & ONNX Runtime 1.18.0 & Moteur d'inférence (\texttt{com.microsoft.onnxruntime}) \\
 \midrule
 \multirow{2}{*}{Frontend}
- & Flutter / Dart & Application mobile \\
- & package \texttt{http} & Consommation de l'API REST \\
+ & Android (Android Studio) & Application mobile (Java/Kotlin) \\
+ & Retrofit / OkHttp & Consommation de l'API REST \\
 \midrule
 Outillage & Maven, Git & Construction et gestion de versions \\
 \bottomrule
@@ -322,7 +322,7 @@ listing~\ref{lst:maven}.
 \end{listing}
 
 \subsection{Format d'échange REST}
-L'échange entre le client Flutter et le backend repose sur JSON. Le listing~\ref{lst:json}
+L'échange entre le client Android et le backend repose sur JSON. Le listing~\ref{lst:json}
 présente un exemple de requête et la réponse correspondante pour un patient critique.
 
 \begin{listing}[H]
@@ -364,7 +364,7 @@ Le tableau~\ref{tab:artefacts} récapitule les principaux artefacts de la chaîn
 \texttt{OnnxModelLoader.java} & Backend & Chargement unique du modèle (Singleton) \\
 \texttt{TriagePredictionService.java} & Backend & Logique métier d'inférence (EJB) \\
 \texttt{TriageResource.java} & Backend & Point d'entrée REST (JAX-RS) \\
-Application Flutter & Frontend & Saisie et restitution mobile \\
+Application Android & Frontend & Saisie et restitution mobile \\
 \bottomrule
 \end{tabular}
 \caption{Principaux artefacts de la solution QuickTriage.}
@@ -376,7 +376,7 @@ Cette section illustre le fonctionnement de l'application mobile sur un parcours
 d'écran (à insérer) présentent successivement l'écran de saisie des constantes, l'écran de
 résultat pour un cas critique et l'écran de résultat pour un cas non urgent.
 
-\figplaceholder{[Figure 6.2 -- Écran de saisie des constantes vitales dans l'application Flutter.]}
+\figplaceholder{[Figure 6.2 -- Écran de saisie des constantes vitales dans l'application Android.]}
 \begin{figure}[h]
 \centering
 \caption{Application QuickTriage -- écran de saisie des constantes.}
