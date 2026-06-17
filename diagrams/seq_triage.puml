@@ -1,0 +1,45 @@
+@startuml
+' Scenario 1 : Cycle complet d'une demande de triage (saisie -> prediction -> affichage)
+skinparam dpi 150
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #14375A
+  LifeLineBorderColor #1F4E79
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #EAF1FB
+  ActorBorderColor #1F4E79
+}
+title Scénario 1 -- Cycle complet d'une demande de triage
+
+actor "Infirmier de tri" as Nurse
+participant "Application\nFlutter" as App
+participant "TriageApiService" as Api
+participant "TriageResource\n(JAX-RS)" as Res
+participant "TriagePredictionService\n(EJB)" as Svc
+participant "OnnxModelLoader\n(Singleton)" as Loader
+database "Modèle ONNX" as Model
+
+Nurse -> App : Saisir les constantes\n(age, SBP, HR, RR, BT, SpO2, douleur...)
+App -> App : Valider les champs
+App -> Api : predict(VitalsModel)
+Api -> Res : POST /api/triage/predict (JSON)
+activate Res
+Res -> Svc : predict(TriageRequest)
+activate Svc
+Svc -> Svc : buildFeatures() (23 features)
+Svc -> Svc : normalize() via StandardScaler\n(metadata_v3.json)
+Svc -> Loader : getSession()
+Loader --> Svc : OrtSession
+Svc -> Model : run(float_input)
+activate Model
+Model --> Svc : label + probabilities
+deactivate Model
+Svc -> Svc : applyThreshold(seuil=0.30 CRITIQUE)
+Svc --> Res : TriageResponse
+deactivate Svc
+Res --> Api : 200 OK (JSON)
+deactivate Res
+Api --> App : TriageResultModel
+App -> Nurse : Afficher classe + confiance + délai\n(code couleur de priorité)
+
+@enduml

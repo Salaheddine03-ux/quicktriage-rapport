@@ -1,0 +1,52 @@
+@startuml
+' Scenario 2 : Detail de l'appel REST et de l'inference cote backend
+skinparam dpi 150
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #14375A
+  LifeLineBorderColor #1F4E79
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #EAF1FB
+}
+title Scénario 2 -- Traitement de la requête REST et inférence ONNX
+
+participant "Client\n(Flutter)" as Client
+participant "TriageResource\n(JAX-RS)" as Res
+participant "TriagePredictionService\n(EJB)" as Svc
+participant "ModelMetadata" as Meta
+participant "OnnxModelLoader" as Loader
+participant "OrtSession\n(ONNX Runtime)" as Ort
+
+Client -> Res : POST /api/triage/predict\nContent-Type: application/json
+activate Res
+Res -> Res : Désérialiser le JSON\n-> TriageRequest
+Res -> Svc : predict(request)
+activate Svc
+
+Svc -> Meta : load(metadata_v3.json)
+Meta --> Svc : scaler_mean, scaler_scale,\nimputer_medians, seuil
+
+Svc -> Svc : buildFeatures() -> 23 valeurs
+Svc -> Svc : imputation (médianes)
+Svc -> Svc : standardisation (z-score)
+
+Svc -> Loader : getSession()
+Loader --> Svc : session (chargée au démarrage)
+Svc -> Ort : run({float_input: tensor[1][23]})
+activate Ort
+Ort --> Svc : {label, probabilities}
+deactivate Ort
+
+alt proba[CRITIQUE] >= 0.30
+  Svc -> Svc : ktasClass = CRITIQUE\nisCritical = true
+else sinon
+  Svc -> Svc : ktasClass = argmax(proba)
+end
+
+Svc --> Res : TriageResponse
+deactivate Svc
+Res -> Res : Sérialiser -> JSON
+Res --> Client : 200 OK\n{ktasClass, confidence, isCritical,\nprobabilities, modelVersion}
+deactivate Res
+
+@enduml

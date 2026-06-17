@@ -1,0 +1,413 @@
+\chapter{Implémentation et Démonstration}
+
+\section*{Introduction du chapitre}
+Ce dernier chapitre concrétise la conception en présentant la réalisation effective de
+QuickTriage. Nous décrivons d'abord l'environnement et la pile technologique de développement,
+puis l'implémentation du pipeline d'apprentissage automatique (préparation des données,
+optimisation, calibration, résultats). Nous détaillons ensuite l'intégration du modèle dans le
+backend J2EE à travers ses composants Java et l'échange REST. Le chapitre se termine par une
+démonstration de la solution et une synthèse des artefacts produits.
+
+\section{Environnement et pile technologique}
+
+\subsection{Outils et versions}
+La réalisation de QuickTriage a mobilisé un ensemble cohérent de technologies, réparties sur les
+trois couches. Le tableau~\ref{tab:stack} en récapitule la pile, avec les versions retenues.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{p{3cm} p{5cm} p{5.5cm}}
+\toprule
+\textbf{Couche} & \textbf{Technologie} & \textbf{Rôle} \\
+\midrule
+\multirow{6}{*}{Apprentissage}
+ & Python 3 & Langage du pipeline ML \\
+ & pandas, NumPy & Manipulation des données \\
+ & scikit-learn & Prétraitement, métriques, SMOTE (\textit{imbalanced-learn}) \\
+ & XGBoost & Modèle de classification \\
+ & Optuna & Optimisation des hyperparamètres \\
+ & ONNX / skl2onnx & Export du modèle interopérable \\
+\midrule
+\multirow{4}{*}{Backend}
+ & Jakarta EE & Plateforme d'entreprise \\
+ & WildFly 10 & Serveur d'application \\
+ & JAX-RS / EJB & API REST et logique métier \\
+ & ONNX Runtime 1.18.0 & Moteur d'inférence (\texttt{com.microsoft.onnxruntime}) \\
+\midrule
+\multirow{2}{*}{Frontend}
+ & Flutter / Dart & Application mobile \\
+ & package \texttt{http} & Consommation de l'API REST \\
+\midrule
+Outillage & Maven, Git & Construction et gestion de versions \\
+\bottomrule
+\end{tabular}
+\caption{Pile technologique de QuickTriage.}
+\label{tab:stack}
+\end{table}
+
+\section{Implémentation du pipeline d'apprentissage automatique}
+
+\subsection{Préparation et augmentation des données}
+Le jeu de données \textit{KTAS Emergency Triage} comporte initialement 1~267 patients réels,
+fortement déséquilibrés entre les classes. Pour corriger ce déséquilibre, une stratégie
+d'augmentation hybride a été mise en œuvre, combinant la génération de patients synthétiques
+calibrés sur les distributions réelles et l'algorithme SMOTE. Le résultat est un jeu équilibré de
+3~000 patients, soit 600 par classe métier. Le listing~\ref{lst:smote} illustre le principe du
+rééquilibrage par SMOTE avec un nombre de voisins adaptatif.
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos]{python}
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+
+# Determination d'un k_neighbors adaptatif (robuste aux petites classes)
+counts = Counter(y_train)
+min_class_size = min(counts.values())
+k_neighbors = max(1, min(5, min_class_size - 1))
+
+smote = SMOTE(random_state=42, k_neighbors=k_neighbors)
+X_balanced, y_balanced = smote.fit_resample(X_train, y_train)
+
+print("Distribution apres reequilibrage :", Counter(y_balanced))
+# -> {CRITIQUE: 600, URGENT: 600, NON_URGENT: 600}
+\end{minted}
+\caption{Rééquilibrage des classes par SMOTE avec \texttt{k\_neighbors} adaptatif.}
+\label{lst:smote}
+\end{listing}
+
+\subsection{Optimisation des hyperparamètres avec Optuna}
+Le modèle XGBoost a été optimisé par Optuna sur \textbf{80 essais}. La fonction objectif maximise
+le F1-score pondéré obtenu en validation croisée. Le listing~\ref{lst:optuna} en présente une forme
+simplifiée.
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos]{python}
+import optuna
+from xgboost import XGBClassifier
+from sklearn.model_selection import cross_val_score
+
+def objective(trial):
+    params = {
+        "n_estimators":  trial.suggest_int("n_estimators", 100, 600),
+        "max_depth":     trial.suggest_int("max_depth", 3, 10),
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+        "subsample":     trial.suggest_float("subsample", 0.6, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+    }
+    model = XGBClassifier(**params, eval_metric="mlogloss", random_state=42)
+    score = cross_val_score(model, X_balanced, y_balanced,
+                            cv=5, scoring="f1_weighted").mean()
+    return score
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=80)
+print("Meilleur essai :", study.best_trial.number)   # -> 64
+print("Meilleurs parametres :", study.best_params)
+\end{minted}
+\caption{Optimisation des hyperparamètres de XGBoost avec Optuna (80 essais).}
+\label{lst:optuna}
+\end{listing}
+
+\noindent Le meilleur essai (\textbf{n\textsuperscript{o}~64}) retient les hyperparamètres
+suivants : \texttt{n\_estimators}~=~458, \texttt{max\_depth}~=~7 et
+\texttt{learning\_rate}~$\approx$~0,0113. Ces valeurs traduisent un modèle relativement profond et
+nombreux en arbres, mais à pas d'apprentissage faible, gage de stabilité.
+
+\subsection{Calibration du seuil orientée sécurité patient}
+Conformément au parti pris de minimiser le sous-triage, le seuil de décision de la classe
+\textsc{Critique} a été abaissé à \textbf{0,30} au lieu de la règle usuelle de l'\textit{argmax}.
+Concrètement, dès que la probabilité estimée d'appartenance à la classe \textsc{Critique} atteint
+0,30, le patient est classé comme critique. Ce réglage privilégie délibérément le rappel des cas
+graves au prix d'un léger sur-triage, jugé acceptable d'un point de vue clinique.
+
+\subsection{Résultats et évaluation}
+Le tableau~\ref{tab:metrics} synthétise les performances du modèle final. L'évaluation met
+l'accent sur la classe \textsc{Critique}, dont le rappel constitue l'indicateur de sécurité
+déterminant.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{p{6cm} c}
+\toprule
+\textbf{Métrique} & \textbf{Valeur} \\
+\midrule
+Exactitude globale (\textit{accuracy}) & 73,8~\% \\
+F1-score pondéré (\textit{weighted}) & 0,729 \\
+Rappel classe \textsc{Critique} & 83,9~\% \\
+F1-score classe \textsc{Critique} & 0,80 \\
+Seuil de décision \textsc{Critique} & 0,30 \\
+\bottomrule
+\end{tabular}
+\caption{Performances du modèle XGBoost final de QuickTriage.}
+\label{tab:metrics}
+\end{table}
+
+\begin{successbox}
+Avec un \textbf{rappel de 83,9~\%} sur la classe \textsc{Critique}, le modèle identifie
+correctement la grande majorité des patients en danger vital, ce qui constitue l'objectif
+prioritaire d'un système d'aide au triage.
+\end{successbox}
+
+\noindent La matrice de confusion (figure~\ref{fig:confusion}) détaille la répartition des
+prédictions par classe et confirme la rareté des erreurs de sous-triage les plus graves
+(patients critiques classés non urgents).
+
+\figplaceholder{[Figure 6.1 -- Matrice de confusion du modèle final sur le jeu de test
+(classes CRITIQUE, URGENT, NON\_URGENT). À insérer : image exportée depuis le notebook
+d'évaluation.]}
+\begin{figure}[h]
+\centering
+\caption{Matrice de confusion du modèle final.}
+\label{fig:confusion}
+\end{figure}
+
+\subsection{Export ONNX}
+Une fois le modèle entraîné et validé, il est exporté au format ONNX afin d'être consommé par le
+backend Java. Le listing~\ref{lst:onnx} montre l'export via \texttt{skl2onnx}. L'artefact produit,
+\texttt{triage\_final\_v3.onnx}, occupe environ 139~Ko.
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos]{python}
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+
+initial_type = [("float_input", FloatTensorType([None, 23]))]
+onnx_model = convert_sklearn(best_model, initial_types=initial_type,
+                             options={type(best_model): {"zipmap": False}})
+
+with open("triage_final_v3.onnx", "wb") as f:
+    f.write(onnx_model.SerializeToString())
+\end{minted}
+\caption{Export du modèle au format ONNX (entrée \texttt{float\_input} de dimension 23).}
+\label{lst:onnx}
+\end{listing}
+
+\section{Intégration du modèle dans le backend J2EE}
+
+\subsection{Chargement du modèle : \texttt{OnnxModelLoader}}
+Le bean \texttt{OnnxModelLoader} charge le modèle une seule fois au démarrage du serveur grâce aux
+annotations \texttt{@Singleton} et \texttt{@Startup}. La session ONNX est ensuite réutilisée pour
+toutes les inférences (listing~\ref{lst:loader}).
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos,breaklines]{java}
+@Singleton
+@Startup
+public class OnnxModelLoader {
+
+    private OrtEnvironment env;
+    private OrtSession session;
+
+    @PostConstruct
+    public void init() {
+        try {
+            env = OrtEnvironment.getEnvironment();
+            byte[] model = getClass().getResourceAsStream("/triage_final_v3.onnx")
+                                     .readAllBytes();
+            session = env.createSession(model, new OrtSession.SessionOptions());
+        } catch (Exception e) {
+            throw new IllegalStateException("Echec du chargement du modele ONNX", e);
+        }
+    }
+
+    public OrtSession getSession() {
+        return session;
+    }
+
+    @PreDestroy
+    public void close() throws Exception {
+        if (session != null) session.close();
+        if (env != null) env.close();
+    }
+}
+\end{minted}
+\caption{Chargement unique du modèle ONNX au démarrage (\texttt{OnnxModelLoader}).}
+\label{lst:loader}
+\end{listing}
+
+\subsection{Logique métier : \texttt{TriagePredictionService}}
+L'EJB \texttt{@Stateless} \texttt{TriagePredictionService} construit le vecteur de
+caractéristiques, applique le prétraitement issu des métadonnées, exécute l'inférence et applique
+le seuil de criticité (listing~\ref{lst:service}).
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos,breaklines]{java}
+@Stateless
+public class TriagePredictionService {
+
+    @Inject
+    private OnnxModelLoader modelLoader;
+
+    private final ModelMetadata meta = ModelMetadata.load("/metadata_v3.json");
+
+    public TriageResponse predict(TriageRequest req) throws Exception {
+        float[] features = normalize(buildFeatures(req));
+
+        OrtSession session = modelLoader.getSession();
+        OrtEnvironment env = OrtEnvironment.getEnvironment();
+        OnnxTensor input = OnnxTensor.createTensor(env, new float[][]{features});
+
+        try (OrtSession.Result result =
+                 session.run(Collections.singletonMap("float_input", input))) {
+            float[] proba = extractProbabilities(result);
+            return applyThreshold(proba);
+        }
+    }
+
+    private TriageResponse applyThreshold(float[] proba) {
+        TriageResponse resp = new TriageResponse();
+        if (proba[KtasClass.CRITIQUE.ordinal()] >= meta.getSeuilCritique()) {
+            resp.setKtasClass(KtasClass.CRITIQUE);
+            resp.setCritical(true);
+        } else {
+            resp.setKtasClass(KtasClass.values()[argmax(proba)]);
+        }
+        resp.setProbabilities(toMap(proba));
+        resp.setModelVersion(meta.getModelVersion());
+        return resp;
+    }
+}
+\end{minted}
+\caption{Logique métier de prédiction et application du seuil (\texttt{TriagePredictionService}).}
+\label{lst:service}
+\end{listing}
+
+\subsection{Exposition REST : \texttt{TriageResource}}
+La ressource JAX-RS \texttt{TriageResource} expose le point d'entrée \texttt{POST
+/api/triage/predict} et délègue le traitement au service (listing~\ref{lst:resource}).
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small,linenos,breaklines]{java}
+@Path("/api/triage")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class TriageResource {
+
+    @Inject
+    private TriagePredictionService predictionService;
+
+    @POST
+    @Path("/predict")
+    public Response predict(TriageRequest request) {
+        try {
+            TriageResponse response = predictionService.predict(request);
+            return Response.ok(response).build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                           .entity("Erreur lors de la prediction").build();
+        }
+    }
+}
+\end{minted}
+\caption{Point d'entrée REST de prédiction (\texttt{TriageResource}).}
+\label{lst:resource}
+\end{listing}
+
+\subsection{Dépendance Maven}
+L'intégration du moteur d'inférence repose sur la dépendance Maven présentée au
+listing~\ref{lst:maven}.
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small]{xml}
+<dependency>
+    <groupId>com.microsoft.onnxruntime</groupId>
+    <artifactId>onnxruntime</artifactId>
+    <version>1.18.0</version>
+</dependency>
+\end{minted}
+\caption{Dépendance Maven pour ONNX Runtime.}
+\label{lst:maven}
+\end{listing}
+
+\subsection{Format d'échange REST}
+L'échange entre le client Flutter et le backend repose sur JSON. Le listing~\ref{lst:json}
+présente un exemple de requête et la réponse correspondante pour un patient critique.
+
+\begin{listing}[H]
+\begin{minted}[bgcolor=bg,fontsize=\small]{json}
+// Requete : POST /api/triage/predict
+{
+  "age": 72, "mental": 3, "nrsPain": 8,
+  "sbp": 85, "dbp": 50, "hr": 124, "rr": 28,
+  "bt": 38.9, "saturation": 90, "arrivalMode": 3
+}
+
+// Reponse : 200 OK
+{
+  "ktasClass": "CRITIQUE",
+  "ktasLevels": "1-2",
+  "delaiMax": 15,
+  "confidence": 0.84,
+  "isCritical": true,
+  "probabilities": { "CRITIQUE": 0.84, "URGENT": 0.12, "NON_URGENT": 0.04 },
+  "modelVersion": "v3"
+}
+\end{minted}
+\caption{Exemple d'échange REST JSON (requête et réponse).}
+\label{lst:json}
+\end{listing}
+
+\section{Synthèse des artefacts produits}
+Le tableau~\ref{tab:artefacts} récapitule les principaux artefacts de la chaîne QuickTriage.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{p{4.5cm} p{3cm} p{6cm}}
+\toprule
+\textbf{Artefact} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{triage\_final\_v3.onnx} & Modèle (139 Ko) & Modèle XGBoost exporté, consommé par le backend \\
+\texttt{metadata\_v3.json} & Métadonnées & Scaler, médianes d'imputation, seuil, version \\
+\texttt{OnnxModelLoader.java} & Backend & Chargement unique du modèle (Singleton) \\
+\texttt{TriagePredictionService.java} & Backend & Logique métier d'inférence (EJB) \\
+\texttt{TriageResource.java} & Backend & Point d'entrée REST (JAX-RS) \\
+Application Flutter & Frontend & Saisie et restitution mobile \\
+\bottomrule
+\end{tabular}
+\caption{Principaux artefacts de la solution QuickTriage.}
+\label{tab:artefacts}
+\end{table}
+
+\section{Démonstration}
+Cette section illustre le fonctionnement de l'application mobile sur un parcours type. Les captures
+d'écran (à insérer) présentent successivement l'écran de saisie des constantes, l'écran de
+résultat pour un cas critique et l'écran de résultat pour un cas non urgent.
+
+\figplaceholder{[Figure 6.2 -- Écran de saisie des constantes vitales dans l'application Flutter.]}
+\begin{figure}[h]
+\centering
+\caption{Application QuickTriage -- écran de saisie des constantes.}
+\label{fig:demo-saisie}
+\end{figure}
+
+\figplaceholder{[Figure 6.3 -- Écran de résultat pour un patient CRITIQUE (bandeau rouge,
+alerte de criticité, délai immédiat, confiance et probabilités).]}
+\begin{figure}[h]
+\centering
+\caption{Application QuickTriage -- résultat pour un cas critique.}
+\label{fig:demo-critique}
+\end{figure}
+
+\figplaceholder{[Figure 6.4 -- Écran de résultat pour un patient NON\_URGENT (bandeau vert).]}
+\begin{figure}[h]
+\centering
+\caption{Application QuickTriage -- résultat pour un cas non urgent.}
+\label{fig:demo-nonurgent}
+\end{figure}
+
+\noindent La démonstration confirme le comportement attendu de bout en bout : la saisie des
+constantes déclenche un appel à l'API, l'inférence est restituée en une fraction de seconde et le
+code couleur permet une lecture immédiate de la priorité. Le cas critique déclenche bien l'alerte
+\texttt{isCritical}, conformément à la règle de seuil calibrée.
+
+\section*{Conclusion du chapitre}
+Ce chapitre a présenté la réalisation concrète de QuickTriage : la pile technologique,
+l'implémentation du pipeline d'apprentissage (augmentation hybride, optimisation Optuna,
+calibration orientée sécurité, export ONNX), l'intégration du modèle dans le backend J2EE via ses
+trois composants Java, l'échange REST JSON, ainsi qu'une démonstration de l'application mobile. La
+solution couvre ainsi l'intégralité de la chaîne, de la donnée brute jusqu'à l'aide à la décision
+restituée au soignant. La conclusion générale dresse le bilan de ce travail et en esquisse les
+perspectives.

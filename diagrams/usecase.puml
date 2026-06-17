@@ -1,0 +1,46 @@
+@startuml
+' Diagramme de cas d'utilisation global -- QuickTriage
+!pragma layout smetana
+skinparam dpi 150
+skinparam backgroundColor #FFFFFF
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #EAF1FB
+  BorderColor #1F4E79
+  FontColor #14375A
+}
+left to right direction
+
+actor "Infirmier de tri\n(Personnel soignant)" as Nurse
+actor "Médecin" as Doctor
+actor "Administrateur" as Admin
+
+rectangle "QuickTriage" {
+  usecase "Saisir les constantes\ndu patient" as UC1
+  usecase "Lancer la prédiction\ndu niveau KTAS" as UC2
+  usecase "Consulter le résultat\n(classe, confiance, délai)" as UC3
+  usecase "Visualiser les\nprobabilités par classe" as UC4
+  usecase "Valider ou corriger\nla proposition" as UC5
+  usecase "Consulter l'historique\ndes triages" as UC6
+  usecase "Gérer / déployer\nle modèle ONNX" as UC7
+  usecase "Consulter la version\ndu modèle" as UC8
+}
+
+Nurse --> UC1
+Nurse --> UC2
+Nurse --> UC3
+Nurse --> UC6
+Doctor --> UC3
+Doctor --> UC4
+Doctor --> UC5
+Doctor --> UC6
+Admin --> UC7
+Admin --> UC8
+
+UC2 .> UC1 : <<include>>
+UC3 .> UC2 : <<include>>
+UC4 .> UC3 : <<extend>>
+UC5 .> UC3 : <<extend>>
+
+@enduml

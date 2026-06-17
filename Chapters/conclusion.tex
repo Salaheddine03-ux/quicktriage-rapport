@@ -1,0 +1,52 @@
+Ce projet de fin d'année a permis de concevoir et de réaliser \textbf{QuickTriage}, un système
+intelligent d'aide au triage des patients aux urgences, couvrant l'intégralité de la chaîne, depuis
+la donnée brute jusqu'à l'application mobile destinée au personnel soignant.
+
+\medskip
+\noindent\textbf{Bilan du travail réalisé.} Le projet a d'abord posé le cadre clinique et la
+problématique du triage, puis dressé un état de l'art des échelles normalisées (CTAS, ESI, MTS,
+KTAS) et des approches d'apprentissage automatique appliquées au triage. Sur cette base, les besoins
+fonctionnels et non-fonctionnels ont été formalisés, puis traduits en une architecture en trois
+couches faiblement couplées : un pipeline d'apprentissage en Python, un backend Jakarta EE exposant
+le modèle au format ONNX via une API REST JAX-RS, et un frontend mobile Flutter. La modélisation UML
+(cas d'utilisation, classes, séquences) a précisé la conception, avant que l'implémentation ne la
+concrétise.
+
+\medskip
+\noindent\textbf{Principaux résultats.} Le modèle XGBoost final, optimisé par Optuna et entraîné sur
+un jeu de données rééquilibré par augmentation hybride, atteint une exactitude de 73,8~\%, un
+F1-score pondéré de 0,729 et, surtout, un rappel de 83,9~\% sur la classe \textsc{Critique}. Ce
+dernier résultat, obtenu grâce à une calibration du seuil de décision à 0,30, traduit le parti pris
+fondamental du projet : \textbf{minimiser le sous-triage} pour préserver la sécurité des patients en
+danger vital. La détection et la correction d'une fuite de données ont par ailleurs garanti
+l'honnêteté et la généralisabilité des performances annoncées.
+
+\medskip
+\noindent\textbf{Limites.} Plusieurs limites doivent être soulignées. Les performances restent
+contraintes par la taille et la nature du jeu de données initial (1~267 patients réels) ; le recours
+à l'augmentation synthétique, bien que nécessaire, introduit une part d'artificialité dans les
+données d'entraînement. De plus, le système n'a pas été validé en conditions cliniques réelles, et
+l'historisation comme la sécurisation complète (authentification, HTTPS de bout en bout) relèvent
+encore d'une mise en production à venir.
+
+\medskip
+\noindent\textbf{Perspectives.} Plusieurs axes d'amélioration se dégagent :
+\begin{itemize}
+  \item \textbf{Enrichissement des données} : intégrer des jeux de données réels plus volumineux et
+  multicentriques, afin de réduire la dépendance à l'augmentation synthétique et d'améliorer la
+  généralisation.
+  \item \textbf{Validation clinique} : conduire une évaluation prospective auprès de soignants, pour
+  mesurer l'apport réel de l'outil et son acceptabilité sur le terrain.
+  \item \textbf{Explicabilité} : intégrer des méthodes d'explication (par exemple SHAP) afin de
+  rendre transparentes les raisons d'une prédiction et de renforcer la confiance des soignants.
+  \item \textbf{Sécurité et conformité} : finaliser l'authentification, le chiffrement de bout en
+  bout et la conformité réglementaire (RGPD) pour un déploiement en production.
+  \item \textbf{Apprentissage continu} : exploiter les décisions validées et corrigées par les
+  médecins (historisées) pour réentraîner périodiquement le modèle et l'améliorer dans le temps.
+\end{itemize}
+
+\medskip
+\noindent En définitive, QuickTriage démontre la faisabilité d'une chaîne complète, interopérable et
+orientée sécurité patient pour l'aide au triage. Au-delà de ses résultats techniques, le projet
+illustre une démarche d'ingénierie rigoureuse, attentive aux pièges méthodologiques de la science des
+données et à l'impératif éthique de placer le jugement clinique du soignant au cœur de la décision.

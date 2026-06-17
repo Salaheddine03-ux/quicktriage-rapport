@@ -1,0 +1,268 @@
+\documentclass{rapportENSIAS}
+\usepackage{lipsum}
+\usepackage{minted}
+\definecolor{bg}{rgb}{0.95,0.95,0.95} % Couleur de fond des blocs de code
+
+\usepackage{titlesec}  % Personnalisation des titres de chapitres / sections
+\usepackage{tocloft}   % Personnalisation de la table des matières
+\usepackage{hyperref}  % Liens hypertextes
+
+% --- Packages additionnels utiles au rapport ---
+\usepackage{booktabs}      % Tableaux de qualite (\toprule, \midrule, \bottomrule)
+\usepackage{array}         % Colonnes de tableaux avancees
+\usepackage{longtable}     % Tableaux sur plusieurs pages
+\usepackage{multirow}      % Cellules fusionnees verticalement
+\usepackage{xcolor}        % Couleurs
+\usepackage{colortbl}      % Couleur de fond des cellules
+\usepackage{graphicx}      % Images
+\usepackage{float}         % Specificateur de position [H]
+\usepackage{textcomp}      % Symboles additionnels (\textdegree)
+\usepackage{tcolorbox}     % Boites colorees (info / succes / erreur)
+\tcbuselibrary{skins,breakable}
+
+% --- Palette de couleurs du rapport ---
+\definecolor{qtblue}{HTML}{1F4E79}
+\definecolor{qtcritique}{HTML}{C0392B}
+\definecolor{qturgent}{HTML}{E67E22}
+\definecolor{qtnonurgent}{HTML}{27AE60}
+\definecolor{qtgray}{HTML}{ECECEC}
+
+% --- Boites colorees reutilisables ---
+\newtcolorbox{infobox}{colback=blue!5,colframe=qtblue,title=Information,fonttitle=\bfseries,breakable}
+\newtcolorbox{successbox}{colback=green!5,colframe=qtnonurgent,title=Point cle,fonttitle=\bfseries,breakable}
+\newtcolorbox{warningbox}{colback=red!5,colframe=qtcritique,title=Attention,fonttitle=\bfseries,breakable}
+
+% --- Emplacement de figure (placeholder) lorsque l'image n'est pas encore disponible ---
+\newcommand{\figplaceholder}[1]{%
+  \begin{center}
+  \setlength{\fboxsep}{10pt}%
+  \fcolorbox{qtblue}{qtgray}{\parbox[c][4.2cm][c]{0.86\textwidth}{\centering\itshape #1}}%
+  \end{center}%
+}
+
+\title{Rapport ENSIAS - QuickTriage}
+
+\begin{document}
+
+%----------- Informations du rapport ---------
+
+\titre{QuickTriage : Système intelligent d'aide au triage des patients aux urgences par apprentissage automatique (KTAS)}
+%\UE{UE PRO}
+\sujet{Projet de Fin d'Année (PFA) -- Année universitaire 2025/2026}
+
+\enseignant{Prénom \textsc{Nom} \textit{(encadrant·e à compléter)}}
+
+\eleves{Ikram \textsc{Nom} \\
+		Binôme \textsc{Nom} \textit{(éventuel)}}
+
+\jury{ Prénom \textsc{Nom}\\
+        Prénom \textsc{Nom}\\
+    }
+
+%----------- Initialisation -------------------
+
+\fairemarges      % Afficher les marges
+\fairepagedegarde % Creer la page de garde
+
+%--------------les premieres pages--------------
+\chapter*{Remerciements}
+\addcontentsline{toc}{chapter}{Remerciements}
+
+Au terme de ce projet de fin d'année, je tiens à exprimer ma profonde gratitude à
+toutes les personnes qui ont contribué, de près ou de loin, à l'aboutissement de ce
+travail.
+
+Je remercie tout particulièrement mon encadrant·e, \textbf{Prénom \textsc{Nom}}, pour
+la confiance accordée, la disponibilité, ainsi que pour les conseils avisés et les
+orientations méthodologiques qui ont jalonné chacune des étapes de ce projet. Son
+exigence bienveillante a constitué un moteur déterminant pour la qualité du résultat
+final.
+
+J'adresse également mes remerciements aux membres du jury, \textbf{Prénom \textsc{Nom}}
+et \textbf{Prénom \textsc{Nom}}, qui m'ont fait l'honneur d'évaluer ce travail et dont
+les remarques contribueront à l'enrichir.
+
+Mes remerciements s'étendent au corps professoral et administratif de
+\textbf{[établissement à compléter]} pour la qualité de la formation dispensée et pour
+l'environnement propice à l'apprentissage et à l'innovation.
+
+Enfin, je dédie une pensée reconnaissante à ma famille et à mes proches pour leur
+soutien indéfectible tout au long de cette année universitaire.
+
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+L'engorgement des services d'urgences hospitalières et la subjectivité inhérente au
+triage manuel constituent des problématiques majeures de santé publique. Ce projet de
+fin d'année présente \textbf{QuickTriage}, un système intelligent d'aide à la décision
+destiné à soutenir le personnel soignant lors du triage des patients à leur arrivée.
+À partir des paramètres vitaux mesurés (âge, état mental, douleur, pression artérielle,
+fréquence cardiaque, fréquence respiratoire, température, saturation, etc.), le système
+prédit automatiquement le niveau de priorité selon l'échelle \textbf{KTAS} (\textit{Korean
+Triage and Acuity Scale}), regroupé en trois classes métier : \textsc{Critique},
+\textsc{Urgent} et \textsc{Non urgent}.
+
+La solution repose sur trois composantes complémentaires : (i) un pipeline
+d'\textbf{apprentissage automatique} fondé sur un modèle \textbf{XGBoost} optimisé par
+\textbf{Optuna}, entraîné sur un jeu de données réel augmenté de façon hybride
+(SMOTE + génération calibrée) pour atteindre l'équilibre des classes ; (ii) un
+\textbf{backend J2EE} (Jakarta EE / WildFly 10) exposant le modèle au format
+\textbf{ONNX} via une API REST \textbf{JAX-RS} ; et (iii) un \textbf{frontend Flutter}
+mobile pour la saisie des constantes et la lecture immédiate du niveau de priorité.
+
+Une attention particulière a été portée à la détection et à la correction d'une fuite de
+données (\textit{data leakage}), ainsi qu'à la calibration du seuil de décision en faveur
+du rappel des cas graves. Le modèle final atteint une exactitude de \textbf{73,8~\%},
+un \textbf{F1-score pondéré de 0,729} et un \textbf{rappel de 83,9~\%} sur la classe
+\textsc{Critique}, garantissant une faible probabilité de sous-évaluer un patient en
+danger vital.
+
+\vspace{0.4cm}
+\noindent\textbf{Mots-clés :} Triage médical, KTAS, aide à la décision clinique,
+apprentissage automatique, XGBoost, ONNX, Jakarta EE, JAX-RS, Flutter, SMOTE, Optuna.
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Emergency department overcrowding and the subjectivity of manual triage are major public
+health concerns. This end-of-year project introduces \textbf{QuickTriage}, an intelligent
+decision-support system designed to assist healthcare staff during patient triage upon
+arrival. Based on measured vital signs (age, mental status, pain, blood pressure, heart
+rate, respiratory rate, body temperature, oxygen saturation, etc.), the system
+automatically predicts the priority level according to the \textbf{KTAS} (Korean Triage
+and Acuity Scale), grouped into three operational classes: \textsc{Critical},
+\textsc{Urgent} and \textsc{Non-urgent}.
+
+The solution relies on three complementary components: (i) a \textbf{machine learning}
+pipeline based on an \textbf{XGBoost} model tuned with \textbf{Optuna}, trained on a real
+dataset augmented through a hybrid strategy (SMOTE + calibrated synthetic generation) to
+balance the classes; (ii) a \textbf{J2EE backend} (Jakarta EE / WildFly 10) exposing the
+\textbf{ONNX} model through a \textbf{JAX-RS} REST API; and (iii) a mobile \textbf{Flutter}
+frontend for entering vital signs and instantly reading the priority level.
+
+Special care was given to detecting and correcting a \textit{data leakage} issue and to
+calibrating the decision threshold in favour of recall for severe cases. The final model
+reaches an accuracy of \textbf{73.8\%}, a \textbf{weighted F1-score of 0.729} and a
+\textbf{recall of 83.9\%} on the \textsc{Critical} class, ensuring a low probability of
+under-triaging life-threatening patients.
+
+\vspace{0.4cm}
+\noindent\textbf{Keywords:} Medical triage, KTAS, clinical decision support, machine
+learning, XGBoost, ONNX, Jakarta EE, JAX-RS, Flutter, SMOTE, Optuna.
+
+\chapter*{Liste des Abréviations}
+\addcontentsline{toc}{chapter}{Liste des Abréviations}
+
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{p{3.2cm} p{11cm}}
+\toprule
+\textbf{Abréviation} & \textbf{Signification} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Abréviation} & \textbf{Signification} \\
+\midrule
+\endhead
+KTAS      & \textit{Korean Triage and Acuity Scale} -- échelle coréenne de triage et d'acuité \\
+CTAS      & \textit{Canadian Triage and Acuity Scale} \\
+ESI       & \textit{Emergency Severity Index} \\
+MTS       & \textit{Manchester Triage System} \\
+ML        & \textit{Machine Learning} -- apprentissage automatique \\
+IA        & Intelligence Artificielle \\
+XGBoost   & \textit{eXtreme Gradient Boosting} \\
+SMOTE     & \textit{Synthetic Minority Over-sampling Technique} \\
+ONNX      & \textit{Open Neural Network Exchange} \\
+API       & \textit{Application Programming Interface} \\
+REST      & \textit{REpresentational State Transfer} \\
+JAX-RS    & \textit{Jakarta API for RESTful Web Services} \\
+EJB       & \textit{Enterprise JavaBeans} \\
+J2EE      & \textit{Java 2 Platform, Enterprise Edition} / Jakarta EE \\
+DTO       & \textit{Data Transfer Object} \\
+JSON      & \textit{JavaScript Object Notation} \\
+CSV       & \textit{Comma-Separated Values} \\
+UML       & \textit{Unified Modeling Language} \\
+UX/UI     & \textit{User eXperience / User Interface} \\
+SBP       & \textit{Systolic Blood Pressure} -- pression artérielle systolique \\
+DBP       & \textit{Diastolic Blood Pressure} -- pression artérielle diastolique \\
+HR        & \textit{Heart Rate} -- fréquence cardiaque \\
+RR        & \textit{Respiratory Rate} -- fréquence respiratoire \\
+BT        & \textit{Body Temperature} -- température corporelle \\
+NRS       & \textit{Numeric Rating Scale} -- échelle numérique d'évaluation de la douleur \\
+SpO\textsubscript{2} & Saturation pulsée en oxygène \\
+F1        & \textit{F1-score} (moyenne harmonique précision/rappel) \\
+PFA       & Projet de Fin d'Année \\
+\bottomrule
+\end{longtable}
+
+\newpage
+\chapter*{Introduction générale}
+\addcontentsline{toc}{chapter}{Introduction générale}
+
+Les services d'urgences constituent la porte d'entrée principale du système hospitalier
+et, à ce titre, sont soumis à une pression croissante. L'augmentation continue du nombre
+de passages, conjuguée à la limitation des ressources humaines et matérielles, engendre
+un phénomène d'engorgement aux conséquences directes sur la qualité des soins et sur la
+sécurité des patients. Dans ce contexte, le \textit{triage} -- c'est-à-dire la
+hiérarchisation des patients selon la gravité de leur état -- joue un rôle déterminant :
+il s'agit d'orienter, dans un temps très court, les patients les plus critiques vers une
+prise en charge immédiate tout en organisant l'attente des cas moins urgents.
+
+Or, le triage demeure dans de nombreux établissements une opération manuelle, dépendante
+de l'expérience et de la disponibilité du personnel soignant. Cette subjectivité expose
+à deux types d'erreurs : la \textit{sur-évaluation} (mobiliser inutilement des ressources)
+et surtout la \textit{sous-évaluation} (sous-estimer un patient réellement en danger), cette
+dernière étant la plus lourde de conséquences. L'apport des méthodes d'apprentissage
+automatique, capables d'objectiver et d'accélérer cette décision à partir des paramètres
+vitaux, apparaît dès lors comme une piste prometteuse.
+
+C'est précisément l'ambition du projet \textbf{QuickTriage} : concevoir un outil d'aide
+à la décision qui prédit automatiquement le niveau de priorité KTAS d'un patient à partir
+de ses constantes, sans jamais se substituer au jugement clinique du soignant, qui
+conserve toujours la décision finale. Ce rapport décrit la démarche complète, depuis
+l'analyse du besoin jusqu'à l'implémentation, en passant par la conception logicielle et
+la modélisation du système.
+
+Le présent document est organisé en six chapitres. Le \textbf{chapitre~1} pose le contexte
+général, la problématique et les objectifs. Le \textbf{chapitre~2} dresse un état de l'art
+des systèmes de triage et positionne QuickTriage. Le \textbf{chapitre~3} formalise
+l'analyse et la spécification des besoins. Le \textbf{chapitre~4} présente la conception et
+l'architecture du système. Le \textbf{chapitre~5} détaille la modélisation UML. Enfin, le
+\textbf{chapitre~6} expose l'implémentation et la démonstration de la solution, avant la
+conclusion générale et les perspectives.
+
+%------------
+\newpage
+\tabledematieres % Creer la table des matieres
+
+\newpage
+\listoffigures
+
+\newpage
+\listoftables
+
+%------------ Corps du rapport ----------------
+\include{Chapters/chapter1}
+\include{Chapters/chapter2}
+\include{Chapters/chapter3}
+\include{Chapters/chapter4}
+\include{Chapters/chapter5}
+\include{Chapters/chapter6}
+
+%------------ Liste of listings----------------
+%\renewcommand\listoflistingscaption{Liste des codes source}
+%\listoflistings
+\newpage
+\chapter*{Conclusion Générale et Perspectives}
+\addcontentsline{toc}{chapter}{Conclusion Générale et Perspectives}
+\input{Chapters/conclusion}
+
+\newpage
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\newpage
+\chapter*{Annexes}
+\addcontentsline{toc}{chapter}{Annexes}
+\input{Chapters/annexes}
+
+\end{document}

@@ -1,0 +1,58 @@
+@startgantt
+' Diagramme de Gantt -- Projet QuickTriage (PFA 2025/2026)
+skinparam dpi 150
+<style>
+ganttDiagram {
+  task {
+    BackGroundColor #1F4E79
+    LineColor #14375A
+    FontColor #FFFFFF
+  }
+  milestone {
+    BackGroundColor #C0392B
+    LineColor #7B241C
+    FontColor #FFFFFF
+  }
+}
+</style>
+
+Project starts 2025-10-06
+saturday are closed
+sunday are closed
+
+[Analyse et cadrage] as [A] lasts 15 days
+[A] is colored in #2E75B6
+
+[Préparation des données] as [B] lasts 20 days
+[B] starts at [A]'s end
+[B] is colored in #2E75B6
+
+[Diagnostic fuite de données] as [B1] lasts 5 days
+[B1] starts at [B]'s start
+
+[Augmentation hybride (SMOTE)] as [B2] lasts 7 days
+[B2] starts at [B1]'s end
+
+[Modélisation XGBoost] as [C] lasts 15 days
+[C] starts at [B]'s end
+
+[Optimisation Optuna + calibration seuil] as [D] lasts 10 days
+[D] starts at [C]'s end
+
+[Export ONNX] as [M1] happens at [D]'s end
+
+[Intégration J2EE (EJB / JAX-RS)] as [E] lasts 20 days
+[E] starts at [D]'s end
+
+[Développement Flutter] as [F] lasts 20 days
+[F] starts at [E]'s start
+
+[Tests d'intégration & démonstration] as [G] lasts 12 days
+[G] starts at [E]'s end
+
+[Rédaction du rapport] as [H] lasts 30 days
+[H] starts at [C]'s start
+
+[Livraison finale] as [M2] happens at [G]'s end
+
+@endgantt

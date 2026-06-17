@@ -1,0 +1,106 @@
+@startuml
+' Diagramme de classes -- QuickTriage (backend J2EE + modeles frontend)
+!pragma layout smetana
+skinparam dpi 150
+skinparam backgroundColor #FFFFFF
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FB
+  BorderColor #1F4E79
+  ArrowColor #14375A
+  FontColor #14375A
+}
+
+enum KtasClass {
+  CRITIQUE
+  URGENT
+  NON_URGENT
+}
+
+class TriageRequest <<DTO>> {
+  - int age
+  - int mental
+  - int nrsPain
+  - double sbp
+  - double dbp
+  - double hr
+  - double rr
+  - double bt
+  - double saturation
+  - int pain
+  - int injury
+  - int arrivalMode
+}
+
+class TriageResponse <<DTO>> {
+  - KtasClass ktasClass
+  - String ktasLevels
+  - int delaiMax
+  - double confidence
+  - boolean isCritical
+  - Map<String,Double> probabilities
+  - String modelVersion
+}
+
+class TriageResource <<@Path /api/triage>> {
+  + Response predict(TriageRequest req)
+}
+
+class TriagePredictionService <<@Stateless EJB>> {
+  + TriageResponse predict(TriageRequest req)
+  - float[] buildFeatures(TriageRequest req)
+  - float[] normalize(float[] raw)
+  - TriageResponse applyThreshold(float[] proba)
+}
+
+class OnnxModelLoader <<@Singleton @Startup>> {
+  - OrtEnvironment env
+  - OrtSession session
+  + void init()
+  + OrtSession getSession()
+  + void close()
+}
+
+class ModelMetadata {
+  - double[] scalerMean
+  - double[] scalerScale
+  - double[] imputerMedians
+  - double seuilCritique
+  - String modelVersion
+  + static ModelMetadata load(String path)
+}
+
+' --- Frontend Flutter ---
+class VitalsModel <<Flutter>> {
+  + int age
+  + double sbp
+  + double hr
+  + ... 
+  + Map<String,dynamic> toJson()
+}
+
+class TriageResultModel <<Flutter>> {
+  + String ktasClass
+  + double confidence
+  + bool isCritical
+  + Map<String,double> probabilities
+  + factory fromJson(json)
+}
+
+class TriageApiService <<Flutter>> {
+  + Future<TriageResultModel> predict(VitalsModel v)
+}
+
+TriageResource ..> TriageRequest : consume
+TriageResource ..> TriageResponse : produce
+TriageResource --> TriagePredictionService : @Inject
+TriagePredictionService --> OnnxModelLoader : @Inject
+TriagePredictionService --> ModelMetadata : utilise
+TriagePredictionService ..> TriageResponse : crée
+TriageResponse o-- KtasClass
+
+TriageApiService ..> VitalsModel : sérialise
+TriageApiService ..> TriageResultModel : désérialise
+TriageApiService ..> TriageResource : HTTP POST
+
+@enduml

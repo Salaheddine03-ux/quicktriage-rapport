@@ -1,0 +1,46 @@
+@startuml
+' Scenario 3 : Validation / correction clinique et historisation
+skinparam dpi 150
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #14375A
+  LifeLineBorderColor #1F4E79
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #EAF1FB
+  ActorBorderColor #1F4E79
+}
+title Scénario 3 -- Validation clinique et historisation du triage
+
+actor "Médecin" as Doctor
+participant "Application\nFlutter" as App
+participant "TriageApiService" as Api
+participant "TriageResource" as Res
+database "Historique\ndes triages" as Hist
+
+Doctor -> App : Consulter la proposition\n(classe CRITIQUE, confiance 84%)
+App -> Doctor : Afficher détails + probabilités
+
+alt Le médecin valide la proposition
+  Doctor -> App : Valider le niveau proposé
+  App -> Api : confirmTriage(resultId, validated=true)
+else Le médecin corrige le niveau
+  Doctor -> App : Corriger (ex. URGENT -> CRITIQUE)
+  App -> Api : confirmTriage(resultId, correctedClass)
+end
+
+Api -> Res : POST /api/triage/confirm (JSON)
+activate Res
+Res -> Hist : enregistrer(triage, décision finale,\nhorodatage, modelVersion)
+Hist --> Res : OK
+Res --> Api : 200 OK
+deactivate Res
+Api --> App : Confirmation
+App -> Doctor : Triage enregistré\n(traçabilité assurée)
+
+note over Hist
+  La décision clinique finale
+  prévaut toujours sur la
+  proposition du modèle.
+end note
+
+@enduml

@@ -1,0 +1,214 @@
+\chapter{Conception et Architecture Système}
+
+\section*{Introduction du chapitre}
+Après avoir formalisé les besoins, ce chapitre traduit les exigences de QuickTriage en une
+architecture logicielle cohérente. Nous présentons d'abord l'architecture générale en
+couches, puis nous détaillons chacune des composantes : le pipeline de données et
+d'apprentissage, le backend J2EE exposant le modèle, et le frontend mobile Flutter. Une
+section est consacrée à la sécurité des données de santé, particulièrement sensible dans le
+domaine médical. Le chapitre se conclut par les choix d'expérience et d'interface
+utilisateur (UX/UI).
+
+\section{Architecture générale du système}
+
+\subsection{Vue d'ensemble en trois couches}
+QuickTriage adopte une architecture en trois couches faiblement couplées, organisée autour
+d'un principe directeur : \textbf{découpler l'entraînement du modèle de son déploiement}.
+Cette séparation permet de faire évoluer indépendamment le modèle d'apprentissage, la logique
+applicative et l'interface utilisateur. Les trois couches sont les suivantes :
+
+\begin{enumerate}
+  \item \textbf{La couche d'apprentissage automatique (\textit{offline}).} Réalisée en
+  Python, elle prend en charge la préparation des données, l'entraînement, l'optimisation et
+  la calibration du modèle. Son livrable est un artefact interopérable au format \textbf{ONNX}
+  accompagné de ses métadonnées de prétraitement.
+  \item \textbf{La couche backend (\textit{serveur d'application}).} Réalisée en Jakarta EE et
+  déployée sur \textbf{WildFly~10}, elle charge le modèle ONNX, applique le même prétraitement
+  qu'à l'entraînement, exécute l'inférence et expose le service via une API REST
+  \textbf{JAX-RS}.
+  \item \textbf{La couche frontend (\textit{client mobile}).} Réalisée en \textbf{Flutter},
+  elle assure la saisie des constantes vitales, l'appel à l'API et la restitution visuelle du
+  résultat au personnel soignant.
+\end{enumerate}
+
+\begin{infobox}
+La frontière nette entre la phase \textit{offline} (entraînement Python) et la phase
+\textit{online} (inférence Java) est rendue possible par le format ONNX, qui sérialise le
+modèle de façon indépendante du langage. Le serveur Java n'a ainsi aucune dépendance vis-à-vis
+de Python à l'exécution.
+\end{infobox}
+
+\subsection{Flux global de l'information}
+Le cheminement d'une requête de triage illustre l'articulation des couches : le soignant
+saisit les constantes dans l'application Flutter ; celles-ci sont sérialisées en JSON et
+transmises par requête HTTP \texttt{POST} à l'API REST ; le backend désérialise la requête,
+reconstruit le vecteur de caractéristiques, applique l'imputation et la standardisation, puis
+exécute l'inférence ONNX ; le résultat (classe, confiance, probabilités, indicateur de
+criticité) est renvoyé en JSON et affiché à l'écran avec un code couleur de priorité. Le
+tableau~\ref{tab:couches} synthétise les responsabilités et technologies de chaque couche.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{p{3cm} p{5.5cm} p{5cm}}
+\toprule
+\textbf{Couche} & \textbf{Responsabilités} & \textbf{Technologies} \\
+\midrule
+Apprentissage (offline) & Préparation, entraînement, optimisation, calibration, export &
+Python, pandas, scikit-learn, XGBoost, Optuna, SMOTE, ONNX \\
+Backend (serveur) & Chargement du modèle, prétraitement, inférence, exposition REST &
+Jakarta EE, WildFly 10, JAX-RS, EJB, ONNX Runtime \\
+Frontend (mobile) & Saisie, validation, appel API, restitution visuelle &
+Flutter, Dart, HTTP \\
+\bottomrule
+\end{tabular}
+\caption{Responsabilités et technologies des trois couches de QuickTriage.}
+\label{tab:couches}
+\end{table}
+
+\section{Architecture de données et pipeline d'apprentissage}
+
+\subsection{Du jeu de données brut au modèle déployable}
+La couche d'apprentissage suit un pipeline séquentiel dont chaque étape produit un artefact
+exploitable par la suivante. Ce pipeline, conçu pour être reproductible, comprend :
+
+\begin{enumerate}
+  \item \textbf{Acquisition et diagnostic.} Chargement du jeu de données \textit{KTAS
+  Emergency Triage} (1~267 patients réels) et contrôle de qualité, incluant la détection de
+  toute variable susceptible d'introduire une fuite de données.
+  \item \textbf{Nettoyage et prétraitement.} Traitement des valeurs manquantes par imputation
+  (médianes), encodage des variables catégorielles et construction du vecteur de
+  caractéristiques (23 \textit{features}).
+  \item \textbf{Augmentation hybride.} Rééquilibrage des classes par combinaison de génération
+  synthétique calibrée et de l'algorithme SMOTE, aboutissant à un jeu équilibré de 3~000
+  patients (600 par classe).
+  \item \textbf{Standardisation.} Normalisation des variables par \textit{StandardScaler}
+  (centrage-réduction), dont les paramètres (moyennes, écarts-types) sont sauvegardés.
+  \item \textbf{Entraînement et optimisation.} Apprentissage d'un modèle XGBoost dont les
+  hyperparamètres sont optimisés par Optuna.
+  \item \textbf{Calibration et évaluation.} Réglage du seuil de décision de la classe
+  \textsc{Critique} et évaluation orientée sécurité patient (rappel des cas graves).
+  \item \textbf{Export.} Sérialisation du modèle au format ONNX et externalisation des
+  métadonnées de prétraitement dans un fichier JSON.
+\end{enumerate}
+
+\subsection{Externalisation des métadonnées de prétraitement}
+Un choix de conception déterminant consiste à \textbf{externaliser les paramètres de
+prétraitement} dans un fichier \texttt{metadata\_v3.json} plutôt que de les coder en dur. Ce
+fichier contient les moyennes et écarts-types du \textit{StandardScaler}, les médianes de
+l'imputeur, le seuil de la classe \textsc{Critique} (0,30) et la version du modèle. Le backend
+le charge au démarrage, garantissant ainsi que \textbf{le prétraitement appliqué à l'inférence
+est rigoureusement identique à celui de l'entraînement}. Cette cohérence est essentielle :
+toute divergence de normalisation entre l'entraînement et l'inférence dégraderait silencieusement
+les performances.
+
+\begin{successbox}
+L'externalisation des métadonnées dans \texttt{metadata\_v3.json} permet de mettre à jour le
+modèle (nouvel ONNX + nouvelles métadonnées) \textbf{sans recompiler le backend}, améliorant
+nettement la maintenabilité de la chaîne.
+\end{successbox}
+
+\section{Architecture du backend J2EE}
+
+\subsection{Organisation en composants}
+Le backend repose sur trois composants Jakarta EE aux responsabilités clairement séparées,
+selon une logique de couches (présentation REST, logique métier, accès au modèle) :
+
+\begin{itemize}
+  \item \texttt{OnnxModelLoader} -- un bean \textbf{\texttt{@Singleton @Startup}} chargé une
+  seule fois à l'amorçage du serveur. Il instancie l'environnement et la session ONNX Runtime
+  et les maintient en mémoire pendant toute la durée de vie de l'application.
+  \item \texttt{TriagePredictionService} -- un EJB \textbf{\texttt{@Stateless}} qui porte la
+  logique métier : construction du vecteur de caractéristiques, imputation, standardisation,
+  appel à la session ONNX et application du seuil de criticité.
+  \item \texttt{TriageResource} -- une ressource \textbf{JAX-RS} (\texttt{@Path
+  "/api/triage"}) qui expose le point d'entrée REST \texttt{POST /predict}, désérialise la
+  requête JSON et sérialise la réponse.
+\end{itemize}
+
+\subsection{Justification des choix d'architecture}
+Le recours au patron \textbf{Singleton} pour le chargement du modèle répond à une exigence de
+performance : le chargement d'un modèle ONNX et l'initialisation du \textit{runtime} sont des
+opérations coûteuses qu'il serait inacceptable de répéter à chaque requête. En les réalisant
+une seule fois au démarrage, on garantit une inférence quasi instantanée par la suite. Le
+caractère \textbf{\texttt{@Stateless}} du service métier favorise la scalabilité : le conteneur
+peut instancier autant de beans que nécessaire pour traiter les requêtes concurrentes, sans
+état partagé à synchroniser. Enfin, l'exposition via \textbf{JAX-RS} assure l'interopérabilité
+et le découplage vis-à-vis du client mobile, conformément aux besoins non-fonctionnels.
+
+\subsection{Contrat d'interface REST}
+L'API expose un point d'entrée principal, décrit au tableau~\ref{tab:rest}. L'échange repose
+sur le format JSON, standard et léger, adapté à une consommation mobile.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{p{2cm} p{4cm} p{7.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{Chemin} & \textbf{Description} \\
+\midrule
+\texttt{POST} & \texttt{/api/triage/predict} & Reçoit les constantes vitales
+(\texttt{TriageRequest}) et retourne la classe KTAS prédite, la confiance, les probabilités
+par classe et l'indicateur de criticité (\texttt{TriageResponse}). \\
+\bottomrule
+\end{tabular}
+\caption{Point d'entrée principal de l'API REST de QuickTriage.}
+\label{tab:rest}
+\end{table}
+
+\section{Sécurité des données de santé}
+Les données manipulées par QuickTriage relèvent de la catégorie des \textbf{données de santé},
+particulièrement sensibles et soumises à des exigences réglementaires strictes (par exemple le
+RGPD en Europe). La conception intègre donc plusieurs principes de protection, en cohérence avec
+les recommandations \textbf{OWASP} :
+
+\begin{itemize}
+  \item \textbf{Minimisation des données.} Seules les constantes strictement nécessaires à la
+  prédiction sont collectées ; aucune donnée d'identification directe du patient n'est requise
+  pour l'inférence.
+  \item \textbf{Chiffrement des échanges.} Les communications entre l'application mobile et le
+  backend doivent emprunter le protocole \textbf{HTTPS}, afin de protéger les données en transit.
+  \item \textbf{Contrôle d'accès.} L'accès à l'API doit être restreint au personnel autorisé,
+  via un mécanisme d'authentification (jetons), conformément au principe du moindre privilège.
+  \item \textbf{Validation des entrées.} Les données reçues sont systématiquement validées
+  (bornes physiologiques, types) afin de prévenir les injections et les requêtes malformées.
+  \item \textbf{Traçabilité.} L'historisation des décisions de triage (horodatage, version du
+  modèle, décision finale) assure l'auditabilité du système.
+\end{itemize}
+
+\begin{warningbox}
+La sécurité n'est pas une option dans un système médical. La protection des données en transit
+(HTTPS), le contrôle d'accès et la validation des entrées constituent le socle minimal de toute
+mise en production de QuickTriage.
+\end{warningbox}
+
+\section{Conception de l'expérience et de l'interface utilisateur}
+
+\subsection{Principes directeurs}
+L'interface de QuickTriage est conçue pour un usage \textbf{sous pression}, dans un
+environnement où chaque seconde compte. Trois principes guident sa conception :
+\begin{itemize}
+  \item \textbf{Rapidité de saisie} : des champs ordonnés selon le flux naturel de recueil des
+  constantes, des claviers numériques adaptés et des valeurs par défaut raisonnables.
+  \item \textbf{Lisibilité immédiate du résultat} : un \textbf{code couleur de priorité}
+  (rouge pour \textsc{Critique}, orange pour \textsc{Urgent}, vert pour \textsc{Non urgent})
+  permettant une lecture instantanée, complété par le délai maximal et le niveau de confiance.
+  \item \textbf{Confiance et transparence} : l'affichage des probabilités par classe et de la
+  version du modèle donne au soignant les éléments pour exercer son jugement critique sur la
+  proposition.
+\end{itemize}
+
+\subsection{Code couleur et hiérarchie visuelle}
+Le code couleur reprend les conventions du triage hospitalier afin de ne pas dérouter le
+personnel. La hiérarchie visuelle met en avant l'information la plus critique (la classe et,
+le cas échéant, l'alerte de criticité), reléguant les détails (probabilités, métadonnées) à un
+second plan consultable à la demande. Ce parti pris réduit la charge cognitive et accélère la
+décision.
+
+\section*{Conclusion du chapitre}
+Ce chapitre a présenté l'architecture en trois couches de QuickTriage et justifié ses choix
+structurants : découplage entraînement/déploiement via ONNX, externalisation des métadonnées
+de prétraitement, composants J2EE aux responsabilités séparées, sécurisation des données de
+santé et interface orientée terrain. Cette architecture constitue le squelette de la solution.
+Le chapitre suivant en propose une vue formelle au travers de la modélisation UML : cas
+d'utilisation, diagramme de classes et scénarios de séquence.

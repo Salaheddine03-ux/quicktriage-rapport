@@ -1,0 +1,131 @@
+\chapter{Contexte Général du Projet}
+
+\section*{Introduction du chapitre}
+Ce premier chapitre a pour vocation de planter le décor du projet \textbf{QuickTriage}.
+Il s'agit de comprendre l'environnement dans lequel s'inscrit la solution, à savoir le
+fonctionnement des services d'urgences hospitalières et les difficultés structurelles
+auxquelles ils font face. Après avoir exposé le contexte et la problématique, nous
+présenterons la motivation qui a guidé ce travail, puis nous formaliserons les objectifs,
+principal et spécifiques. Le chapitre se clôt par la mise en évidence des contributions et
+des innovations apportées par QuickTriage.
+
+\section{Contexte et Problématique}
+
+\subsection{Le triage aux urgences : une fonction critique}
+Le service des urgences est, par définition, un environnement où l'incertitude et le
+caractère vital des décisions cohabitent en permanence. À leur arrivée, les patients
+présentent des tableaux cliniques extrêmement hétérogènes, allant du motif bénin à
+l'urgence vitale. Le \textit{triage} consiste à évaluer rapidement la gravité de chaque
+patient afin de déterminer l'ordre et le délai de prise en charge. Cette étape, réalisée
+généralement par un infirmier organisateur de l'accueil (IOA), conditionne l'ensemble du
+parcours de soins : un triage juste sauve des vies, un triage erroné peut être fatal.
+
+\subsection{L'engorgement des urgences}
+Partout dans le monde, les services d'urgences connaissent une croissance soutenue du
+nombre de passages, sans augmentation proportionnelle des moyens. Cet
+\textit{engorgement} se traduit par des temps d'attente allongés, une saturation des box
+de soins et une charge mentale accrue pour le personnel. Dans un tel contexte, la pression
+temporelle pesant sur la décision de triage augmente, et avec elle le risque d'erreur.
+La rapidité et la fiabilité de l'évaluation initiale deviennent des enjeux de premier plan.
+
+\subsection{Les limites du triage manuel}
+Le triage manuel, bien qu'encadré par des échelles standardisées, demeure tributaire de
+plusieurs facteurs de variabilité :
+\begin{itemize}
+  \item \textbf{La subjectivité de l'évaluateur} : deux soignants peuvent attribuer des
+  niveaux différents à un même patient, en fonction de leur expérience et de leur état de
+  fatigue.
+  \item \textbf{La pression temporelle} : la nécessité de décider vite favorise les biais
+  cognitifs et les raccourcis de raisonnement.
+  \item \textbf{La charge cognitive} : l'intégration mentale simultanée de nombreux
+  paramètres vitaux est difficile, surtout en période d'affluence.
+  \item \textbf{Le risque de sous-triage} : sous-estimer la gravité d'un patient constitue
+  l'erreur la plus dangereuse, car elle retarde une prise en charge potentiellement vitale.
+\end{itemize}
+
+\begin{warningbox}
+Le \textit{sous-triage} (classer un patient grave comme non urgent) est l'erreur la plus
+redoutée en médecine d'urgence. La conception de QuickTriage place donc la maximisation du
+\textbf{rappel sur la classe \textsc{Critique}} au cœur de ses priorités, quitte à tolérer
+quelques sur-triages.
+\end{warningbox}
+
+\subsection{Énoncé de la problématique}
+La problématique centrale de ce projet peut être formulée ainsi : \textit{Comment concevoir
+un outil numérique fiable, rapide et accessible, capable d'assister le personnel soignant
+dans la décision de triage en objectivant l'évaluation de la priorité d'un patient à partir
+de ses paramètres vitaux, tout en garantissant que la décision clinique finale demeure de la
+responsabilité du soignant~?}
+
+\section{Motivation du Projet}
+La motivation du projet QuickTriage procède d'un triple constat. D'abord, un
+\textbf{constat clinique} : les erreurs de triage, et singulièrement le sous-triage,
+demeurent une cause évitable de morbidité. Ensuite, un \textbf{constat technologique} :
+les progrès récents de l'apprentissage automatique, conjugués à des formats d'échange de
+modèles interopérables comme ONNX et à des frameworks mobiles modernes comme Flutter,
+rendent désormais réaliste le déploiement d'un outil d'aide à la décision léger et
+embarquable. Enfin, un \textbf{constat d'opportunité} : il existe des jeux de données
+publics de triage (notamment basés sur l'échelle KTAS) permettant d'entraîner et de valider
+de tels modèles.
+
+L'ambition n'est pas de remplacer le soignant, mais de lui offrir un \textbf{second avis
+objectif et instantané}, agissant comme un filet de sécurité contre les erreurs
+d'inattention et comme un accélérateur de la décision en période de forte affluence.
+
+\section{Objectifs}
+
+\subsection{Objectif principal}
+L'objectif principal est de \textbf{concevoir et réaliser un système complet d'aide au
+triage} qui prédit automatiquement le niveau de priorité KTAS d'un patient à partir de ses
+constantes vitales, et le restitue de manière claire et immédiate au personnel soignant via
+une application mobile.
+
+\subsection{Objectifs spécifiques}
+\begin{enumerate}
+  \item \textbf{Construire un modèle d'apprentissage automatique} robuste de classification
+  du niveau KTAS, en traitant explicitement les difficultés de qualité des données (fuite de
+  données, déséquilibre des classes).
+  \item \textbf{Maximiser le rappel de la classe \textsc{Critique}} afin de minimiser le
+  sous-triage, par une calibration adaptée du seuil de décision.
+  \item \textbf{Exposer le modèle via une API REST} performante et interopérable, en
+  s'appuyant sur le format ONNX et une architecture J2EE (Jakarta EE / WildFly).
+  \item \textbf{Développer une application mobile Flutter} ergonomique, optimisée pour une
+  saisie rapide et une lecture immédiate du résultat (code couleur de priorité).
+  \item \textbf{Garantir la primauté du jugement clinique}, le système se positionnant
+  strictement comme une aide à la décision et non comme un décideur autonome.
+\end{enumerate}
+
+\section{Contributions et Innovations}
+Au-delà de l'assemblage de briques technologiques, le projet QuickTriage se distingue par
+plusieurs contributions :
+\begin{itemize}
+  \item \textbf{Diagnostic et correction d'une fuite de données.} Une première version du
+  modèle s'appuyait sur un jeu de données contenant une variable (\texttt{plasma\_glucose})
+  introduisant une fuite de données (\textit{data leakage}). Sa détection a conduit à un
+  changement de jeu de données vers \textit{KTAS Emergency Triage}, gage de résultats
+  honnêtes et généralisables.
+  \item \textbf{Stratégie d'augmentation hybride des données.} Pour pallier le déséquilibre
+  des classes, une approche combinant la génération de patients synthétiques calibrés sur la
+  distribution réelle et l'algorithme SMOTE (avec \texttt{k\_neighbors} adaptatif) a été mise
+  en œuvre, aboutissant à un jeu équilibré de 3~000 patients (600 par classe).
+  \item \textbf{Calibration orientée sécurité patient.} Le seuil de décision de la classe
+  \textsc{Critique} a été abaissé à 0,30 afin de privilégier le rappel des cas graves, en
+  cohérence avec l'impératif clinique de limiter le sous-triage.
+  \item \textbf{Chaîne d'intégration interopérable.} L'export du modèle au format ONNX et son
+  chargement unique au démarrage du serveur J2EE assurent des inférences rapides et
+  reproductibles, indépendamment du langage d'entraînement.
+\end{itemize}
+
+\begin{successbox}
+QuickTriage n'est pas un simple prototype de modèle~: c'est une \textbf{chaîne complète et
+cohérente}, de la donnée brute jusqu'à l'application mobile, dont chaque maillon a été
+pensé pour la fiabilité et la sécurité du patient.
+\end{successbox}
+
+\section*{Conclusion du chapitre}
+Ce chapitre a permis de cerner le contexte du triage aux urgences, d'en exposer les limites
+actuelles et de formuler la problématique à laquelle QuickTriage entend répondre. Nous avons
+également défini les objectifs du projet et mis en lumière ses principales contributions.
+Pour situer notre solution par rapport à l'existant et en justifier les choix, le chapitre
+suivant propose un état de l'art des systèmes de triage et un positionnement comparatif de
+QuickTriage.

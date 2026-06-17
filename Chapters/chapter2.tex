@@ -1,0 +1,156 @@
+\chapter{État de l'Art et Positionnement}
+
+\section*{Introduction du chapitre}
+Avant de concevoir une nouvelle solution, il est indispensable d'examiner les approches
+existantes afin d'en comprendre les forces, les limites et les zones d'innovation possibles.
+Ce chapitre dresse d'abord un panorama des principales échelles de triage normalisées
+(CTAS, ESI, MTS, KTAS), puis des outils logiciels et des travaux de recherche mobilisant
+l'apprentissage automatique pour le triage. Il se conclut par une analyse comparative
+positionnant QuickTriage au regard de ces solutions.
+
+\section{Analyse des solutions existantes}
+
+\subsection{Les échelles de triage normalisées}
+Afin de réduire la variabilité du triage, plusieurs échelles standardisées à cinq niveaux
+ont été développées et largement adoptées à l'échelle internationale.
+
+\begin{itemize}
+  \item \textbf{CTAS} (\textit{Canadian Triage and Acuity Scale}) : échelle canadienne à
+  cinq niveaux, associant à chaque niveau un délai cible de prise en charge ; elle s'appuie
+  sur des plaintes types et des modificateurs (paramètres vitaux, douleur).
+  \item \textbf{ESI} (\textit{Emergency Severity Index}) : échelle nord-américaine à cinq
+  niveaux fondée sur un algorithme décisionnel qui combine la gravité immédiate et la
+  consommation prévisible de ressources.
+  \item \textbf{MTS} (\textit{Manchester Triage System}) : système britannique reposant sur
+  des organigrammes (\textit{flowcharts}) par motif de consultation, aboutissant à un code
+  couleur de priorité.
+  \item \textbf{KTAS} (\textit{Korean Triage and Acuity Scale}) : adaptation coréenne de la
+  CTAS, également à cinq niveaux, qui sert de référence à ce projet. Le niveau~1 correspond à
+  une urgence vitale immédiate et le niveau~5 à un cas non urgent.
+\end{itemize}
+
+Le tableau~\ref{tab:echelles} synthétise les caractéristiques de ces échelles.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{2.2cm} p{2.2cm} p{2cm} p{6.5cm}}
+\toprule
+\textbf{Échelle} & \textbf{Origine} & \textbf{Niveaux} & \textbf{Principe de fonctionnement} \\
+\midrule
+CTAS & Canada & 5 & Plaintes types + modificateurs (constantes, douleur) \\
+ESI  & États-Unis & 5 & Algorithme gravité + ressources prévisibles \\
+MTS  & Royaume-Uni & 5 & Organigrammes par motif, code couleur \\
+KTAS & Corée du Sud & 5 & Adaptation de la CTAS, niveau 1 = urgence vitale \\
+\bottomrule
+\end{tabular}
+\caption{Comparaison des principales échelles de triage normalisées.}
+\label{tab:echelles}
+\end{table}
+
+\subsection{Le regroupement métier adopté par QuickTriage}
+Si l'échelle KTAS comporte cinq niveaux, l'usage opérationnel de triage privilégie souvent
+un regroupement plus lisible. QuickTriage adopte un regroupement en \textbf{trois classes
+métier}, présenté au tableau~\ref{tab:classes}, qui simplifie la lecture tout en préservant
+l'essentiel de l'information clinique : la distinction entre l'urgence vitale, l'urgence
+relative et le non-urgent.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{p{3.2cm} p{2.5cm} p{6.5cm}}
+\toprule
+\textbf{Classe métier} & \textbf{Niveaux KTAS} & \textbf{Délai de prise en charge} \\
+\midrule
+\textcolor{qtcritique}{\textbf{CRITIQUE}}     & KTAS 1--2 & Prise en charge immédiate ($<$ 15 min) \\
+\textcolor{qturgent}{\textbf{URGENT}}         & KTAS 3    & Prise en charge rapide \\
+\textcolor{qtnonurgent}{\textbf{NON\_URGENT}} & KTAS 4--5 & Prise en charge différée \\
+\bottomrule
+\end{tabular}
+\caption{Regroupement des niveaux KTAS en trois classes métier dans QuickTriage.}
+\label{tab:classes}
+\end{table}
+
+\subsection{Outils logiciels existants}
+Sur le plan logiciel, l'informatisation du triage prend aujourd'hui plusieurs formes :
+\begin{itemize}
+  \item \textbf{Modules de triage intégrés aux DPI} (dossiers patients informatisés) : ils
+  guident la saisie selon une échelle (souvent ESI ou MTS) mais reposent essentiellement sur
+  des règles fixes et l'appréciation humaine, sans réelle prédiction statistique.
+  \item \textbf{Calculateurs et applications de scores} : applications mobiles reproduisant
+  les organigrammes d'une échelle donnée ; elles guident le soignant mais n'apprennent pas
+  des données.
+  \item \textbf{Solutions de recherche fondées sur l'IA} : prototypes académiques explorant
+  des modèles prédictifs, rarement intégrés dans une chaîne applicative complète et
+  déployable.
+\end{itemize}
+
+\subsection{Approches d'apprentissage automatique dans la littérature}
+La littérature scientifique sur le triage assisté par apprentissage automatique a connu un
+essor notable. Les travaux mobilisent typiquement des modèles tels que la régression
+logistique, les forêts aléatoires, les machines à gradient boosté (dont XGBoost) ou encore
+les réseaux de neurones, à partir des paramètres vitaux et de variables administratives. Les
+principaux enseignements de ces travaux, qui ont guidé nos choix, sont les suivants :
+\begin{itemize}
+  \item Les méthodes d'\textbf{ensemble par boosting} (XGBoost et apparentés) offrent un
+  excellent compromis entre performance et robustesse sur des données tabulaires
+  hétérogènes.
+  \item Le \textbf{déséquilibre des classes} (les cas critiques étant rares) constitue un
+  obstacle majeur, justifiant des techniques de rééquilibrage telles que SMOTE.
+  \item L'\textbf{évaluation} ne doit pas se limiter à l'exactitude globale ; le rappel sur
+  les classes graves est l'indicateur de sécurité déterminant.
+  \item La \textbf{fuite de données} est un piège fréquent qui conduit à surestimer
+  artificiellement les performances ; sa détection est cruciale.
+\end{itemize}
+
+\section{Analyse comparative et positionnement de QuickTriage}
+
+\subsection{Critères de comparaison}
+Pour positionner QuickTriage, nous retenons les critères suivants : l'échelle de triage
+utilisée, le degré d'automatisation, le recours effectif à l'apprentissage automatique,
+l'intégration dans une application mobile, la prise en compte de la sécurité patient
+(orientation vers le rappel des cas graves), et la complétude de la chaîne applicative
+(de la donnée jusqu'au déploiement).
+
+\subsection{Tableau comparatif}
+Le tableau~\ref{tab:positionnement} confronte QuickTriage aux grandes familles de solutions
+identifiées.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\small
+\begin{tabular}{p{3.2cm} p{2.3cm} p{2.3cm} p{2.3cm} p{3.2cm}}
+\toprule
+\textbf{Critère} & \textbf{Échelles manuelles} & \textbf{Modules DPI} & \textbf{Protos IA (recherche)} & \textbf{QuickTriage} \\
+\midrule
+Échelle utilisée        & Variable & ESI/MTS & Variable & KTAS (3 classes) \\
+Automatisation          & Aucune & Partielle (règles) & Modèle seul & De bout en bout \\
+Apprentissage auto.     & Non & Non & Oui & Oui (XGBoost+Optuna) \\
+Intégration mobile      & Non & Rare & Rare & Oui (Flutter) \\
+Orientation sécurité    & Dépend de l'humain & Règles fixes & Variable & Rappel CRITIQUE optimisé \\
+Chaîne complète         & --- & Partielle & Non & ML + J2EE + Mobile \\
+\bottomrule
+\end{tabular}
+\caption{Positionnement comparatif de QuickTriage.}
+\label{tab:positionnement}
+\end{table}
+
+\subsection{Synthèse du positionnement}
+Il ressort de cette analyse que QuickTriage se distingue moins par l'emploi isolé d'une
+technique que par la \textbf{cohérence et la complétude de sa chaîne}. Là où les outils
+existants se cantonnent souvent à une seule dimension -- guidage par règles, ou modèle
+prédictif sans intégration -- QuickTriage articule un pipeline d'apprentissage rigoureux
+(détection de fuite, rééquilibrage, optimisation, calibration), une exposition
+interopérable via ONNX et une API REST J2EE, ainsi qu'une application mobile pensée pour le
+terrain. Surtout, le projet assume un parti pris clair de \textbf{sécurité patient} en
+optimisant le rappel des cas critiques, ce qui le différencie des approches purement
+orientées exactitude globale.
+
+\section*{Conclusion du chapitre}
+Cet état de l'art a permis de situer les échelles de triage de référence, de recenser les
+outils existants et de dégager les enseignements de la littérature sur l'apprentissage
+automatique appliqué au triage. Le positionnement comparatif a mis en évidence la valeur
+ajoutée de QuickTriage : une solution intégrée, interopérable et orientée sécurité patient.
+Forts de ce cadrage, nous pouvons désormais formaliser précisément les besoins du système,
+objet du chapitre suivant.
